@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+    
+    <meta name="apple-mobile-web-app-title" content="frog-travel">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>frog-travel</title>
+    
+    <link rel="icon" type="image/png" href="icon.png" />
+    <link rel="apple-touch-icon" href="icon.png" />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        body { background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #374151; }
+        input, select, textarea { font-size: 16px; }
+        @keyframes fade-in-up {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fade-in-scale {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .animate-fade-in-up { animation: fade-in-up 0.3s ease-out; }
+        .animate-fade-in-scale { animation: fade-in-scale 0.2s ease-out; }
+        
+        /* 聊天氣泡動畫 */
+        @keyframes message-pop {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .message-anim { animation: message-pop 0.3s ease-out; }
+    </style>
+    <script>
+        tailwind.config = { theme: { extend: { colors: { primary: '#f87171' } } } }
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useCallback, useRef } = React;
+        const Icon = ({ name, size = 20, color = "currentColor", className="", strokeWidth=2 }) => {
+            useEffect(() => { lucide.createIcons(); }, [name]); 
+            return <i data-lucide={name} width={size} height={size} stroke={color} stroke-width={strokeWidth} className={className}></i>;
+        };
+
+        const formatDateTime24h = (isoString) => {
+            if (!isoString) return '';
+            const d = new Date(isoString);
+            const pad = (n) => n.toString().padStart(2, '0');
+            return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        };
+
+        const resizeImage = (file, maxWidth = 300) => {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+                        if (width > maxWidth) {
+                            height *= maxWidth / width;
+                            width = maxWidth;
+                        }
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/jpeg', 0.5)); 
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        };
+
+        const INITIAL_TRIP_DATA = {
+            flights: [
+                { type: "去程", code: "IT262", date: "12/26", detail: "KHH 12:40 - 16:30 OKJ" },
+                { type: "回程", code: "IT263", date: "12/31", detail: "OKJ 17:55 - 20:20 KHH" }
+            ],
+            hotels: [
+                { date: "12/26-12/27", name: "三井ガーデンホテル岡山", address: "岡山県岡山市北区駅元町1-7", map: "https://www.google.com/maps/search/?api=1&query=三井ガーデンホテル岡山" },
+                { date: "12/27-12/28", name: "御宿 野乃松江", address: "島根県松江市北田町", map: "https://www.google.com/maps/search/?api=1&query=御宿+野乃松江" },
+                { date: "12/28-12/31", name: "相鉄フレッサイン 広島駅前", address: "広島県広島市南区猿猴橋町", map: "https://www.google.com/maps/search/?api=1&query=相鉄フレッサイン+広島駅前" }
+            ],
+            links: { visitJapan: "https://www.vjw.digital.go.jp/", myMap: "https://www.google.com/maps/d/u/0/edit?mid=14RKxuT-qgVjDU42Nj_3dvN02jgydwo4&usp=sharing" }
+        };
+
+        const INITIAL_ITINERARY = [
+            { id: 1, date: "2025-12-26", time: "16:30", type: "move", title: "抵達岡山機場", note: "入境手續" },
+            { id: 2, date: "2025-12-26", time: "18:00", type: "shopping", title: "永旺夢樂城 岡山", note: "晚餐與逛街" },
+            { id: 3, date: "2025-12-26", time: "21:00", type: "hotel", title: "三井ガーデンホテル岡山", note: "Check-in" },
+            { id: 4, date: "2025-12-27", time: "09:00", type: "move", title: "搭乘八雲號", note: "往松江" },
+            { id: 5, date: "2025-12-27", time: "11:00", type: "spot", title: "松江城 & 遊覽船", note: "國寶天守" },
+            { id: 6, date: "2025-12-27", time: "16:00", type: "spot", title: "宍道湖夕日", note: "夕陽百選" },
+            { id: 7, date: "2025-12-27", time: "19:00", type: "hotel", title: "御宿 野乃松江", note: "溫泉" },
+            { id: 8, date: "2025-12-28", time: "09:00", type: "spot", title: "出雲大社", note: "結緣" },
+            { id: 9, date: "2025-12-28", time: "18:00", type: "move", title: "前往廣島", note: "移動" },
+            { id: 10, date: "2025-12-28", time: "20:00", type: "hotel", title: "相鉄フレッサイン 広島", note: "連住" },
+            { id: 11, date: "2025-12-29", time: "10:00", type: "spot", title: "和平紀念公園", note: "原爆圓頂" },
+            { id: 12, date: "2025-12-29", time: "14:00", type: "shopping", title: "本通商店街", note: "購物" },
+            { id: 13, date: "2025-12-29", time: "20:00", type: "hotel", title: "相鉄フレッサイン 広島", note: "" },
+            { id: 14, date: "2025-12-30", time: "09:00", type: "spot", title: "嚴島神社", note: "海上鳥居" },
+            { id: 15, date: "2025-12-30", time: "20:00", type: "hotel", title: "相鉄フレッサイン 広島", note: "" },
+            { id: 16, date: "2025-12-31", time: "10:00", type: "move", title: "前往岡山機場", note: "回程" }
+        ];
+
+        const INITIAL_MEMOS = [
+            { id: 1, title: "玉山Wallet", content: "免手續費：1.5%\n立即折抵：10%(依券別)", image: null },
+            { id: 2, title: "中信uniopen", content: "實體：11%上限6,250元\n日本7-11每季單次：\n單筆滿1,500日圓(含稅)\n享300元日圓現金回饋", image: null }
+        ];
+
+        const CATEGORIES = [
+            { id: 'food', name: '食', color: 'bg-orange-600' }, { id: 'clothing', name: '衣', color: 'bg-violet-500' },
+            { id: 'housing', name: '住', color: 'bg-amber-400' }, { id: 'transport', name: '行', color: 'bg-green-600' },
+            { id: 'education', name: '育', color: 'bg-blue-500' }, { id: 'fun', name: '樂', color: 'bg-pink-500' },
+            { id: 'agent', name: '代', color: 'bg-stone-600' }, { id: 'other', name: '它', color: 'bg-slate-700' },
+        ];
+
+        const PAYMENT_METHODS = ['PayPay', '富邦J', '中信uniopen', '玉山unicard', '台新太陽', '現金', 'SUICA'];
+
+        const HomeView = () => (
+            <div className="space-y-4 pb-24">
+                <div className="w-full h-48 bg-gray-200 rounded-b-3xl overflow-hidden relative shadow-md">
+                    <img src="https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?ixlib=rb-4.0.3&w=800&q=80" className="w-full h-full object-cover" />
+                    <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/60 to-transparent p-4">
+                        <h1 className="text-white text-xl font-bold">frog-travel</h1>
+                        <p className="text-gray-200 text-sm">2025/12/26 出發</p>
+                    </div>
+                </div>
+                <div className="px-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <a href={INITIAL_TRIP_DATA.links.visitJapan} target="_blank" className="bg-white p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center space-y-2 active:scale-95 transition-transform">
+                            <Icon name="qr-code" className="text-blue-500" size={32} /> <span className="text-blue-500 font-bold text-sm">Visit Japan Web</span>
+                        </a>
+                        <a href={INITIAL_TRIP_DATA.links.myMap} target="_blank" className="bg-white p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center space-y-2 active:scale-95 transition-transform">
+                            <Icon name="map" className="text-rose-400" size={32} /> <span className="text-rose-400 font-bold text-sm">我的地圖</span>
+                        </a>
+                    </div>
+                    
+                    <div className="bg-white rounded-2xl p-3 shadow-sm">
+                        <h3 className="font-bold text-gray-700 mb-2 flex items-center gap-2"><Icon name="plane" size={18} /> 航班資訊</h3>
+                        <div className="space-y-2">
+                            {INITIAL_TRIP_DATA.flights.map((f, i) => (
+                                <div key={i} className="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-xs font-bold px-2 py-0.5 rounded bg-gray-200 text-gray-800">{f.type}</span>
+                                        <span className="font-bold text-gray-700 text-sm">({f.code})</span>
+                                        <span className="text-sm text-gray-500">{f.date}</span>
+                                    </div>
+                                    <div className="text-gray-800 font-bold font-mono pl-1 text-sm">{f.detail}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    
+                    <div className="bg-white rounded-2xl p-3 shadow-sm">
+                        <h3 className="font-bold text-gray-700 mb-2 flex items-center gap-2">
+                            <Icon name="bed-double" size={18} /> 住宿資訊 
+                            <span className="text-[10px] text-gray-400 font-normal ml-1">CI 15:00 / CO 11:00</span>
+                        </h3>
+                        <div className="space-y-2">
+                            {INITIAL_TRIP_DATA.hotels.map((h, i) => (
+                                <div key={i} className="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-200 text-gray-700 whitespace-nowrap">{h.date}</span>
+                                        <span className="font-bold text-gray-800 text-sm truncate">{h.name}</span>
+                                    </div>
+                                    <div className="flex justify-between items-end gap-2 pl-1">
+                                        <div className="text-gray-500 text-[10px] leading-tight line-clamp-1">{h.address}</div>
+                                        <a href={h.map} target="_blank" className="text-blue-500 text-[10px] font-bold flex items-center gap-1 shrink-0 whitespace-nowrap bg-white px-1.5 py-0.5 rounded border border-blue-100">
+                                            <Icon name="map-pin" size={10} /> Map
+                                        </a>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const ItineraryView = ({ itineraryData, setItineraryData }) => {
+            const [selectedDate, setSelectedDate] = useState("2025-12-26");
+            const [isEditMode, setIsEditMode] = useState(false);
+            const [editingItem, setEditingItem] = useState(null);
+            const [weather, setWeather] = useState({ temp: '--', max: '--', min: '--', feels: '--', humidity: '--', code: 0, loading: false, location: '' });
+
+            const dates = useMemo(() => {
+                const arr = []; let curr = new Date("2025-12-26");
+                for(let i=0; i<6; i++) { arr.push(new Date(curr)); curr.setDate(curr.getDate()+1); }
+                return arr;
+            }, []);
+
+            useEffect(() => {
+                const fetchWeather = async () => {
+                    setWeather(prev => ({...prev, loading: true}));
+                    let lat = 34.6555, lon = 133.9198, locName = '岡山 (Okayama)'; 
+                    if (selectedDate === '2025-12-27') { lat = 35.4681; lon = 133.0485; locName = '松江 (Matsue)'; }
+                    else if (selectedDate >= '2025-12-28') { lat = 34.3853; lon = 132.4553; locName = '廣島 (Hiroshima)'; }
+
+                    const cacheKey = `weather_${selectedDate}`;
+                    const cached = localStorage.getItem(cacheKey);
+                    if (cached) setWeather(JSON.parse(cached));
+
+                    try {
+                        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=Asia%2FTokyo`);
+                        const data = await res.json();
+                        if (data.current && data.daily) {
+                            const newWeather = {
+                                temp: Math.round(data.current.temperature_2m),
+                                max: Math.round(data.daily.temperature_2m_max[0]),
+                                min: Math.round(data.daily.temperature_2m_min[0]),
+                                feels: Math.round(data.current.apparent_temperature),
+                                humidity: data.current.relative_humidity_2m,
+                                code: data.current.weather_code,
+                                location: locName,
+                                loading: false
+                            };
+                            setWeather(newWeather);
+                            localStorage.setItem(cacheKey, JSON.stringify(newWeather));
+                        }
+                    } catch (e) {
+                        console.log("Offline mode", e);
+                        setWeather(prev => ({...prev, loading: false}));
+                    }
+                };
+                fetchWeather();
+            }, [selectedDate]);
+
+            const hours = [...Array(24).keys()].map(i => i.toString().padStart(2, '0'));
+            const minutes = [...Array(60).keys()].map(i => i.toString().padStart(2, '0'));
+            const daysEvents = itineraryData.filter(i => i.date === selectedDate).sort((a,b)=>a.time.localeCompare(b.time));
+            
+            const getTypeStyle = (type) => {
+                switch(type) {
+                    case 'hotel': return { bg:'bg-purple-100', c:'text-purple-600', i:'bed' };
+                    case 'move': return { bg:'bg-green-100', c:'text-green-500', i:'footprints' };
+                    case 'shopping': return { bg:'bg-teal-100', c:'text-teal-500', i:'shopping-bag' };
+                    case 'food': return { bg:'bg-amber-100', c:'text-amber-500', i:'utensils' };
+                    case 'spot': default: return { bg:'bg-red-100', c:'text-red-600', i:'map-pin' };
+                }
+            };
+
+            const handleSave = (e) => {
+                e.preventDefault(); 
+                const form = e.target;
+                const combinedTime = `${form.hour.value}:${form.minute.value}`;
+                const newItem = { id: editingItem?.id || Date.now(), date: selectedDate, time: combinedTime, type: form.type.value, title: form.title.value, note: form.note.value };
+                setItineraryData(prev => editingItem?.id ? prev.map(i => i.id === newItem.id ? newItem : i) : [...prev, newItem]);
+                setEditingItem(null);
+            };
+
+             // 匯出行程 CSV 功能
+            const exportItineraryCSV = () => {
+                const sortedData = [...itineraryData].sort((a, b) => {
+                    if (a.date !== b.date) return a.date.localeCompare(b.date);
+                    return a.time.localeCompare(b.time);
+                });
+                const header = "\uFEFF日期,時間,類別,地點/項目,備註\n";
+                const rows = sortedData.map(item => {
+                    let typeName = '景點';
+                    if(item.type === 'move') typeName = '移動';
+                    if(item.type === 'shopping') typeName = '購物';
+                    if(item.type === 'food') typeName = '餐廳';
+                    if(item.type === 'hotel') typeName = '住宿';
+                    return `${item.date},${item.time},${typeName},${item.title},${item.note || ''}`;
+                }).join("\n");
+                const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `JapanTrip_Itinerary_${new Date().toISOString().slice(0,10)}.csv`;
+                link.click();
+            };
+
+            return (
+                <div className="h-full flex flex-col pb-20">
+                    <div className="bg-white shadow-sm pt-4 pb-2 px-2 sticky top-0 z-10"><div className="flex overflow-x-auto no-scrollbar gap-3 px-2">
+                        {dates.map((d, i) => {
+                            const dStr = d.toISOString().split('T')[0];
+                            return <button key={i} onClick={() => setSelectedDate(dStr)} className={`flex-shrink-0 flex flex-col items-center justify-center w-16 h-20 rounded-2xl transition-all ${dStr === selectedDate ? 'bg-red-400 text-white shadow-md scale-105' : 'bg-gray-50 text-gray-400'}`}><span className="text-xs font-bold opacity-80">DAY {i+1}</span><span className="text-lg font-bold">{d.getMonth()+1}/{d.getDate()}</span></button>
+                        })}
+                    </div></div>
+                    <div className="p-4 flex-1 overflow-y-auto">
+                        <div className="bg-white border border-blue-100 rounded-2xl p-3 shadow-sm mb-4 flex items-center gap-4">
+                            <div className="flex items-center gap-2 pl-2"><Icon name={weather.code > 3 ? "cloud-rain" : "cloud-sun"} size={32} className="text-blue-500" /><span className="text-3xl font-bold text-gray-800 tracking-tight">{weather.temp}°</span></div>
+                            <div className="w-px h-8 bg-gray-100"></div>
+                            <div className="flex-1 flex flex-col justify-center gap-0.5 text-xs text-gray-500">
+                                <div className="flex items-center gap-1 font-bold text-gray-700"><Icon name="map-pin" size={10} className="text-red-400"/> {weather.location}</div>
+                                <div>H:{weather.max}° L:{weather.min}°</div>
+                                <div className="flex items-center gap-2"><span>體感 {weather.feels}°</span><span className="text-gray-200">|</span><span className="flex items-center gap-1"><Icon name="droplets" size={10} className="text-blue-300"/> {weather.humidity}%</span></div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="font-bold text-gray-700">行程總覽</h3>
+                            <div className="flex gap-2">
+                                <button onClick={exportItineraryCSV} className="text-xs px-3 py-1 rounded-full border bg-white text-gray-500 flex items-center gap-1 active:scale-95"><Icon name="file-down" size={14} /> 匯出</button>
+                                <button onClick={() => setIsEditMode(!isEditMode)} className={`text-xs px-3 py-1 rounded-full border ${isEditMode ? 'bg-red-400 text-white' : 'bg-white text-gray-500'}`}>{isEditMode ? '完成' : '編輯'}</button>
+                            </div>
+                        </div>
+                        <div className="space-y-4 relative pl-2">
+                            {daysEvents.map((item, idx) => {
+                                const style = getTypeStyle(item.type);
+                                const mapSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.title)}`;
+                                return (
+                                    <div key={item.id} className="flex gap-3 relative">
+                                        <div className="flex flex-col items-center w-12 shrink-0 relative">
+                                            {idx !== daysEvents.length - 1 && <div className="absolute top-10 bottom-[-24px] w-0.5 bg-gray-200 -z-0"></div>}
+                                            <span className="text-[11px] font-bold text-gray-500 mb-1 font-mono tracking-tight">{item.time}</span>
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white shadow-md z-10 ${style.bg.replace('bg-', 'bg-').replace('100', '500')}`}><Icon name={style.i} size={20} /></div>
+                                        </div>
+                                        <div className="flex-1 bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-transform">
+                                            <div className="flex-1 min-w-0 pr-2">
+                                                <h4 className={`font-bold text-base truncate ${style.c}`}>{item.title}</h4>
+                                                {item.note && <p className="text-xs text-gray-400 mt-0.5 truncate">{item.note}</p>}
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                {isEditMode ? (
+                                                    <><button onClick={()=>setEditingItem(item)} className="p-2 bg-blue-50 rounded-full text-blue-400"><Icon name="edit-2" size={14}/></button><button onClick={()=>{if(confirm('刪除?'))setItineraryData(p=>p.filter(x=>x.id!==item.id))}} className="p-2 bg-red-50 rounded-full text-red-400"><Icon name="trash-2" size={14}/></button></>
+                                                ) : <a href={mapSearchUrl} target="_blank" className="text-gray-300 hover:text-blue-500 transition-colors"><Icon name="send" size={18} /></a>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {isEditMode && <button onClick={() => setEditingItem({id:null, time:'12:00', type:'spot', title:'', note:''})} className="w-full py-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 flex justify-center items-center gap-2 hover:bg-gray-50 mt-4"><Icon name="plus" /> 新增行程</button>}
+                        </div>
+                    </div>
+                    {editingItem && (
+                        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                            <form onSubmit={handleSave} className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-fade-in-up">
+                                <h3 className="font-bold text-lg mb-4 text-center">{editingItem.id?'編輯':'新增'}行程</h3>
+                                <div className="space-y-3">
+                                    <div className="grid grid-cols-5 gap-2">
+                                        <div className="col-span-3 flex gap-1 items-center bg-gray-50 p-3 rounded-xl border">
+                                            <select name="hour" defaultValue={editingItem.time.split(':')[0]} className="bg-transparent outline-none text-center font-bold text-lg w-full appearance-none text-gray-700">{hours.map(h => <option key={h} value={h}>{h}</option>)}</select>
+                                            <span className="font-bold text-gray-400">:</span>
+                                            <select name="minute" defaultValue={editingItem.time.split(':')[1]} className="bg-transparent outline-none text-center font-bold text-lg w-full appearance-none text-gray-700">{minutes.map(m => <option key={m} value={m}>{m}</option>)}</select>
+                                        </div>
+                                        <select name="type" defaultValue={editingItem.type} className="col-span-2 bg-gray-50 p-3 rounded-xl border w-full text-sm font-bold text-gray-600">
+                                            <option value="spot">景點</option>
+                                            <option value="move">移動</option>
+                                            <option value="shopping">購物</option>
+                                            <option value="food">餐廳</option>
+                                            <option value="hotel">住宿</option>
+                                        </select>
+                                    </div>
+                                    <input type="text" name="title" placeholder="地點名稱" defaultValue={editingItem.title} className="w-full bg-gray-50 p-3 rounded-xl border" required />
+                                    <input type="text" name="note" placeholder="備註" defaultValue={editingItem.note} className="w-full bg-gray-50 p-3 rounded-xl border" />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 mt-6">
+                                    <button type="button" onClick={()=>setEditingItem(null)} className="py-3 bg-gray-100 rounded-xl font-bold text-gray-500">取消</button>
+                                    <button type="submit" className="py-3 bg-red-400 rounded-xl font-bold text-white">儲存</button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const ConverterView = () => {
+            const [rate, setRate] = useState(0.225);
+            const [input, setInput] = useState("0");
+            const [mode, setMode] = useState("JPY"); 
+            const [showRateModal, setShowRateModal] = useState(false);
+            const [newRate, setNewRate] = useState(rate);
+            
+            // Calculator state
+            const [prevValue, setPrevValue] = useState(null);
+            const [op, setOp] = useState(null);
+            const [waiting, setWaiting] = useState(false);
+
+            const calculate = (val) => {
+                if(val === "") return "0";
+                return mode === "JPY" ? (parseFloat(val)*rate).toFixed(0) : (parseFloat(val)/rate).toFixed(0);
+            };
+
+            const handleNum = (n) => {
+                if (waiting) {
+                    setInput(String(n));
+                    setWaiting(false);
+                } else {
+                    setInput(prev => prev === "0" ? String(n) : prev + n);
+                }
+            };
+
+            const handleOp = (nextOp) => {
+                const current = parseFloat(input);
+                if (prevValue != null) {
+                    let result = current;
+                    if (op === '+') result = prevValue + current;
+                    if (op === '-') result = prevValue - current;
+                    if (op === '×') result = prevValue * current;
+                    if (op === '÷') result = prevValue / current;
+                    setInput(String(result));
+                    setPrevValue(result);
+                } else {
+                    setPrevValue(current);
+                }
+                setOp(nextOp);
+                setWaiting(true);
+            };
+
+            const handleEqual = () => {
+                if (op && prevValue != null) {
+                    const current = parseFloat(input);
+                    let result = current;
+                    if (op === '+') result = prevValue + current;
+                    if (op === '-') result = prevValue - current;
+                    if (op === '×') result = prevValue * current;
+                    if (op === '÷') result = prevValue / current;
+                    setInput(String(result));
+                    setPrevValue(null);
+                    setOp(null);
+                    setWaiting(true);
+                }
+            };
+
+            const handleClear = () => {
+                setInput("0");
+                setPrevValue(null);
+                setOp(null);
+                setWaiting(false);
+            };
+
+            const handleBS = () => {
+                if (waiting) return;
+                setInput(prev => prev.length > 1 ? prev.slice(0, -1) : "0");
+            };
+
+            const getHistoryDisplay = () => {
+                if (op && prevValue != null) {
+                    return `${prevValue} ${op}`;
+                }
+                return "";
+            };
+
+            const saveRate = () => { setRate(parseFloat(newRate)); setShowRateModal(false); };
+            const openRateModal = () => { setNewRate(rate); setShowRateModal(true); };
+
+            const btnClass = "h-16 rounded-2xl font-bold text-xl shadow-sm active:scale-95 transition-transform flex items-center justify-center";
+            const numBtn = `${btnClass} bg-white text-gray-700`;
+            const opBtn = `${btnClass} bg-red-50 text-red-500`;
+            const eqBtn = `${btnClass} bg-red-400 text-white row-span-2 shadow-md`;
+
+            return (
+                <div className="h-full flex flex-col p-4 bg-gray-50 pb-24 relative">
+                    <div className="flex justify-end mb-4">
+                        <button onClick={openRateModal} className="flex items-center gap-2 bg-white px-3 py-2 rounded-full shadow-sm text-xs font-bold text-gray-500 active:scale-95 transition-transform border border-gray-100">
+                            <Icon name="sliders-horizontal" size={14} className="text-red-400" /><span>匯率: {rate}</span>
+                        </button>
+                    </div>
+                    
+                    {/* Display Area */}
+                    <div className="bg-white rounded-3xl p-6 shadow-sm mb-4 flex-1 flex flex-col justify-center space-y-6">
+                        <div onClick={()=>setMode("JPY")} className={`cursor-pointer transition-all ${mode==='JPY'?'opacity-100 scale-105':'opacity-50'}`}>
+                            <div className="text-sm text-gray-500 mb-1">日幣 (JPY)</div>
+                            <div className="flex justify-between items-end">
+                                <div className={`text-4xl font-bold ${mode==='JPY'?'text-red-400':'text-gray-800'}`}>{mode==='JPY'?input:calculate(input)}</div>
+                                {mode === 'JPY' && <div className="text-sm text-gray-400 font-medium mb-1 font-mono">{getHistoryDisplay()}</div>}
+                            </div>
+                        </div>
+                        <div className="w-full h-px bg-gray-100"></div>
+                        <div onClick={()=>setMode("TWD")} className={`cursor-pointer transition-all ${mode==='TWD'?'opacity-100 scale-105':'opacity-50'}`}>
+                            <div className="text-sm text-gray-500 mb-1">台幣 (TWD)</div>
+                            <div className="flex justify-between items-end">
+                                <div className={`text-4xl font-bold ${mode==='TWD'?'text-red-400':'text-gray-800'}`}>{mode==='TWD'?input:calculate(input)}</div>
+                                {mode === 'TWD' && <div className="text-sm text-gray-400 font-medium mb-1 font-mono">{getHistoryDisplay()}</div>}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-4 gap-3 grid-rows-5 h-[420px]">
+                        <button onClick={handleClear} className={opBtn}>C</button>
+                        <button onClick={()=>handleOp('÷')} className={opBtn}>÷</button>
+                        <button onClick={()=>handleOp('×')} className={opBtn}>×</button>
+                        <button onClick={handleBS} className={opBtn}><Icon name="delete" /></button>
+                        <button onClick={()=>handleNum(7)} className={numBtn}>7</button>
+                        <button onClick={()=>handleNum(8)} className={numBtn}>8</button>
+                        <button onClick={()=>handleNum(9)} className={numBtn}>9</button>
+                        <button onClick={()=>handleOp('-')} className={opBtn}>-</button>
+                        <button onClick={()=>handleNum(4)} className={numBtn}>4</button>
+                        <button onClick={()=>handleNum(5)} className={numBtn}>5</button>
+                        <button onClick={()=>handleNum(6)} className={numBtn}>6</button>
+                        <button onClick={()=>handleOp('+')} className={opBtn}>+</button>
+                        <button onClick={()=>handleNum(1)} className={numBtn}>1</button>
+                        <button onClick={()=>handleNum(2)} className={numBtn}>2</button>
+                        <button onClick={()=>handleNum(3)} className={numBtn}>3</button>
+                        <button onClick={handleEqual} className={`${eqBtn} row-span-2 text-2xl`}>=</button>
+                        <button onClick={()=>handleNum(0)} className={`${numBtn} col-span-2`}>0</button>
+                        <button onClick={()=>handleNum('.')} className={numBtn}>.</button>
+                    </div>
+                    {showRateModal && (
+                        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6">
+                            <div className="bg-white w-full max-w-xs rounded-3xl p-6 shadow-2xl animate-fade-in-scale">
+                                <h3 className="font-bold text-lg text-center mb-4 text-gray-700">設定匯率</h3>
+                                <div className="bg-gray-50 p-4 rounded-2xl flex items-center justify-center gap-2 mb-6 border border-gray-100"><span className="text-sm font-bold text-gray-400">1 JPY =</span><input type="number" step="0.001" value={newRate} onChange={e => setNewRate(e.target.value)} className="w-20 bg-transparent text-2xl font-bold text-center text-gray-800 outline-none border-b-2 border-red-200 focus:border-red-400 transition-colors" autoFocus /><span className="text-sm font-bold text-gray-400">TWD</span></div>
+                                <div className="grid grid-cols-2 gap-3"><button onClick={() => setShowRateModal(false)} className="py-3 bg-gray-100 rounded-xl font-bold text-gray-500 active:bg-gray-200 transition-colors">取消</button><button onClick={saveRate} className="py-3 bg-red-400 rounded-xl font-bold text-white shadow-lg shadow-red-200 active:scale-95 transition-all">確定</button></div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const AccountingView = ({ expenses, setExpenses, shoppingList = [], setShoppingList, paymentMemos, setPaymentMemos }) => {
+            const [viewMode, setViewMode] = useState('expenses'); 
+            const [showModal, setShowModal] = useState(false);
+            const [editingExp, setEditingExp] = useState(null);
+            const [form, setForm] = useState({ amount:'', currency:'JPY', category:'food', item:'', payment:'現金', payer:'小包', note:'' });
+            
+            const totalJPY = expenses.filter(e => e.currency === 'JPY').reduce((sum, e) => sum + Number(e.amount), 0);
+            const totalTWD = expenses.filter(e => e.currency === 'TWD').reduce((sum, e) => sum + Number(e.amount), 0);
+
+            const openModal = (exp = null) => {
+                if(exp) { setEditingExp(exp); setForm(exp); } 
+                else { setEditingExp(null); setForm({ amount:'', currency:'JPY', category:'food', item:'', payment:'現金', payer:'小包', note:'' }); }
+                setShowModal(true);
+            };
+            const submit = () => { 
+                if(!form.amount || !form.item) return alert("請輸入金額與品項");
+                const newExp = { ...form, id: editingExp ? editingExp.id : Date.now(), timestamp: editingExp ? editingExp.timestamp : new Date().toISOString() };
+                setExpenses(prev => editingExp ? prev.map(e => e.id === newExp.id ? newExp : e) : [newExp, ...prev]); 
+                setShowModal(false); 
+            };
+            const deleteExpense = () => {
+                if(confirm("確定要刪除這筆支出嗎？")) { setExpenses(prev => prev.filter(e => e.id !== editingExp.id)); setShowModal(false); }
+            };
+            const exportExpensesCSV = () => {
+                const csv = "\uFEFF時間,分類,品項,金額,幣別,付款方式,付款人,備註\n" + 
+                expenses.map(e => `${formatDateTime24h(e.timestamp)},${CATEGORIES.find(c=>c.id===e.category)?.name},${e.item},${e.amount},${e.currency},${e.payment},${e.payer},${e.note}`).join("\n");
+                const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })); link.download = `JapanTrip_Expenses_${new Date().toISOString().slice(0,10)}.csv`; link.click();
+            };
+            const formatMoney = (amount) => Number(amount).toLocaleString();
+
+            // Wishlist Logic
+            const [showWishModal, setShowWishModal] = useState(false);
+            const [wishForm, setWishForm] = useState({ name: '', image: null });
+            const addWishItem = () => {
+                if(!wishForm.name) return;
+                setShoppingList(prev => [...prev, { id: Date.now(), name: wishForm.name, image: wishForm.image, bought: false }]);
+                setShowWishModal(false); setWishForm({ name: '', image: null });
+            };
+            const toggleBought = (id) => { setShoppingList(prev => prev.map(item => item.id === id ? { ...item, bought: !item.bought } : item)); };
+            const deleteWishItem = (id) => { if(confirm("移除此預購項目？")) setShoppingList(prev => prev.filter(item => item.id !== id)); };
+            const handleImageUpload = async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    try { const compressed = await resizeImage(file); setWishForm(prev => ({ ...prev, image: compressed })); } 
+                    catch (error) { alert("圖片處理失敗"); }
+                }
+            };
+            
+            // 購物清單匯出功能
+            const exportShoppingListCSV = () => {
+                const csv = "\uFEFF狀態,物品名稱\n" +
+                shoppingList.map(item => `${item.bought ? '已購買' : '未購買'},${item.name}`).join("\n");
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+                link.download = `JapanTrip_ShoppingList_${new Date().toISOString().slice(0,10)}.csv`;
+                link.click();
+            };
+
+            // Memo Logic with Image
+            const [showMemoModal, setShowMemoModal] = useState(false);
+            const [memoForm, setMemoForm] = useState({ id: null, title: '', content: '', image: null });
+            const openMemoModal = (memo = null) => {
+                if (memo) setMemoForm(memo);
+                else setMemoForm({ id: null, title: '', content: '', image: null });
+                setShowMemoModal(true);
+            };
+            const submitMemo = () => {
+                if (!memoForm.title) return alert("請輸入標題");
+                const newMemo = { ...memoForm, id: memoForm.id || Date.now() };
+                setPaymentMemos(prev => memoForm.id ? prev.map(m => m.id === newMemo.id ? newMemo : m) : [newMemo, ...prev]);
+                setShowMemoModal(false);
+            };
+            const deleteMemo = () => {
+                if (confirm("確定刪除此筆記？")) {
+                    setPaymentMemos(prev => prev.filter(m => m.id !== memoForm.id));
+                    setShowMemoModal(false);
+                }
+            };
+            const moveMemo = (index, direction) => {
+                const newMemos = [...paymentMemos];
+                if (direction === -1 && index > 0) {
+                    [newMemos[index], newMemos[index - 1]] = [newMemos[index - 1], newMemos[index]];
+                } else if (direction === 1 && index < newMemos.length - 1) {
+                    [newMemos[index], newMemos[index + 1]] = [newMemos[index + 1], newMemos[index]];
+                }
+                setPaymentMemos(newMemos);
+            };
+            const handleMemoImageUpload = async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    try { const compressed = await resizeImage(file); setMemoForm(prev => ({ ...prev, image: compressed })); } 
+                    catch (error) { alert("圖片處理失敗"); }
+                }
+            };
+
+            return (
+                <div className="h-full flex flex-col bg-gray-50 pb-20">
+                    <div className="flex flex-col p-4 bg-gray-50 sticky top-0 z-10 gap-3">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-xl font-bold text-gray-800">記帳中心</h2>
+                            <div className="flex gap-2">
+                                {(viewMode === 'expenses' || viewMode === 'wishlist') && (
+                                    <button onClick={viewMode === 'expenses' ? exportExpensesCSV : exportShoppingListCSV} className="w-8 h-8 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 shadow-sm">
+                                        <Icon name="file-down" size={16}/>
+                                    </button>
+                                )}
+                                <button onClick={() => {
+                                    if (viewMode === 'expenses') openModal();
+                                    else if (viewMode === 'wishlist') setShowWishModal(true);
+                                    else openMemoModal();
+                                }} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-400 text-white shadow-md"><Icon name="plus" size={18}/></button>
+                            </div>
+                        </div>
+                        <div className="flex bg-gray-200 p-1 rounded-xl">
+                            <button onClick={()=>setViewMode('expenses')} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode==='expenses' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}>支出紀錄</button>
+                            <button onClick={()=>setViewMode('wishlist')} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode==='wishlist' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}>購物清單</button>
+                            <button onClick={()=>setViewMode('memo')} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode==='memo' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}>優惠筆記</button>
+                        </div>
+                    </div>
+
+                    {viewMode === 'expenses' && (
+                        <>
+                            <div className="px-4 grid grid-cols-2 gap-3 mb-4">
+                                <div className="bg-white p-4 rounded-xl shadow-sm border-b-4 border-red-400"><div className="text-xs text-gray-500 mb-1">總支出 (日幣)</div><div className="text-2xl font-bold text-gray-800 tracking-tight">{formatMoney(totalJPY)}</div></div>
+                                <div className="bg-white p-4 rounded-xl shadow-sm border-b-4 border-red-400"><div className="text-xs text-gray-500 mb-1">總支出 (台幣)</div><div className="text-2xl font-bold text-gray-800 tracking-tight">{formatMoney(totalTWD)}</div></div>
+                            </div>
+                            <div className="px-4 space-y-3 overflow-y-auto flex-1">
+                                {expenses.length===0 && <div className="text-center text-gray-400 mt-10 text-sm">點擊右上角 + 新增第一筆支出</div>}
+                                {expenses.map(e => { 
+                                    const cat = CATEGORIES.find(c=>c.id===e.category); 
+                                    const dateObj = new Date(e.timestamp);
+                                    const dateStr = `${(dateObj.getMonth()+1)}/${dateObj.getDate()}`;
+                                    return (
+                                        <div key={e.id} className="bg-white p-2.5 rounded-xl shadow-sm relative group active:scale-[0.99] transition-transform" onClick={() => openModal(e)}>
+                                            <div className="flex justify-between items-start mb-1">
+                                                <div className="font-bold text-gray-800 text-base truncate pr-2 flex-1">{e.item}</div>
+                                                <div className="font-bold text-red-500 text-xl whitespace-nowrap leading-none">{formatMoney(e.amount)} <span className="text-xs font-normal text-gray-400">{e.currency}</span></div>
+                                            </div>
+                                            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar text-[10px]">
+                                                <span className={`px-2 py-0.5 rounded-full text-white ${cat.color} shrink-0`}>{cat.name}</span>
+                                                <span className="text-gray-400 shrink-0">{dateStr}</span>
+                                                <div className="w-px h-3 bg-gray-200 shrink-0"></div>
+                                                <span className="px-1.5 py-0.5 border rounded text-gray-500 border-gray-200 shrink-0">{e.payment}</span>
+                                                <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-500 rounded font-bold shrink-0">{e.payer}</span>
+                                                {e.note && <span className="text-gray-300 truncate max-w-[100px] italic ml-1">· {e.note}</span>}
+                                            </div>
+                                            <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity text-gray-300"><Icon name="edit-3" size={14}/></div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </>
+                    )}
+
+                    {viewMode === 'wishlist' && (
+                        <div className="px-4 grid grid-cols-2 gap-3 overflow-y-auto flex-1 content-start pb-4">
+                            {(shoppingList || []).length === 0 && <div className="col-span-2 text-center text-gray-400 mt-10 text-sm">尚無購物清單，點擊右上角 + 新增</div>}
+                            {(shoppingList || []).map(item => (
+                                <div key={item.id} className={`bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col relative transition-all ${item.bought ? 'grayscale-[50%]' : ''}`}>
+                                    <div className="aspect-square bg-gray-100 flex items-center justify-center overflow-hidden relative group">
+                                        {item.image ? <img src={item.image} alt={item.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" /> : <Icon name="image" size={32} className="text-gray-300" />}
+                                        <button onClick={(e) => { e.stopPropagation(); toggleBought(item.id); }} className={`absolute bottom-2 right-2 text-[10px] px-2 py-1 rounded-full font-bold shadow-md backdrop-blur-md transition-all active:scale-95 flex items-center gap-1 ${item.bought ? 'bg-green-500 text-white' : 'bg-white/80 text-gray-600 hover:bg-white'}`}>
+                                            {item.bought && <Icon name="check" size={10} strokeWidth={3}/>} {item.bought ? '已買' : '未買'}
+                                        </button>
+                                    </div>
+                                    <div className="px-3 py-2.5 flex items-center justify-between bg-white">
+                                        <div className="font-bold text-gray-800 text-sm truncate flex-1 pr-2">{item.name}</div>
+                                        <button onClick={() => deleteWishItem(item.id)} className="text-gray-300 hover:text-red-400 p-1 -mr-1 rounded-full hover:bg-red-50 transition-colors shrink-0"><Icon name="trash-2" size={16}/></button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {viewMode === 'memo' && (
+                        <div className="px-4 space-y-4 overflow-y-auto flex-1 pb-4">
+                             {(paymentMemos || []).length === 0 && <div className="text-center text-gray-400 mt-10 text-sm">尚無筆記，點擊右上角 + 新增</div>}
+                             {(paymentMemos || []).map((memo, idx) => (
+                                 <div key={memo.id} onClick={() => openMemoModal(memo)} className="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-yellow-400 active:scale-[0.99] transition-transform cursor-pointer relative group">
+                                     <div className="flex justify-between items-center mb-2 border-b pb-2 border-gray-100">
+                                        <div className="flex items-center gap-3">
+                                            {memo.image && <img src={memo.image} className="w-16 h-10 object-cover rounded-md border border-gray-200" />}
+                                            <h3 className="font-bold text-gray-800 text-lg">{memo.title}</h3>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {idx > 0 && <button onClick={(e) => { e.stopPropagation(); moveMemo(idx, -1); }} className="p-1 text-gray-300 hover:text-gray-500 hover:bg-gray-100 rounded"><Icon name="arrow-up" size={14} /></button>}
+                                            {idx < paymentMemos.length - 1 && <button onClick={(e) => { e.stopPropagation(); moveMemo(idx, 1); }} className="p-1 text-gray-300 hover:text-gray-500 hover:bg-gray-100 rounded"><Icon name="arrow-down" size={14} /></button>}
+                                            <div className="w-px h-3 bg-gray-200 mx-1"></div>
+                                            <Icon name="edit-2" size={14} className="text-gray-300" />
+                                        </div>
+                                     </div>
+                                     <div className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed font-mono bg-gray-50 p-2 rounded-lg">{memo.content}</div>
+                                 </div>
+                             ))}
+                        </div>
+                    )}
+
+                    {/* Modals */}
+                    {showModal && (
+                        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center">
+                            <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 h-[85vh] sm:h-auto overflow-y-auto animate-fade-in-up flex flex-col">
+                                <div className="flex justify-between items-center mb-1"><h3 className="text-xl font-bold text-gray-800">新增支出</h3><button onClick={()=>setShowModal(false)} className="text-gray-400"><Icon name="x" size={24} /></button></div>
+                                <div className="text-xs text-gray-400 mb-6">記帳時間: {new Date().toLocaleString()}</div>
+                                <div className="space-y-5 flex-1">
+                                    <div className="flex gap-3">
+                                        <div className="flex-1"><label className="text-xs text-gray-500 mb-1 block">金額</label><input type="number" value={form.amount} onChange={e=>setForm({...form, amount:e.target.value})} className="w-full border border-gray-200 rounded-lg p-3 text-lg font-bold outline-none focus:border-red-400" placeholder="0" autoFocus /></div>
+                                        <div className="w-24"><label className="text-xs text-gray-500 mb-1 block">幣別</label><select value={form.currency} onChange={e=>setForm({...form, currency:e.target.value})} className="w-full border border-gray-200 rounded-lg p-3 text-lg font-bold outline-none bg-white"><option value="JPY">JPY</option><option value="TWD">TWD</option></select></div>
+                                    </div>
+                                    <div><label className="text-xs text-gray-500 mb-1 block">品項</label><input type="text" value={form.item} onChange={e=>setForm({...form, item:e.target.value})} className="w-full border border-gray-200 rounded-lg p-3 outline-none focus:border-red-400" placeholder="例如: 廣島燒午餐" /></div>
+                                    <div>
+                                        <label className="text-xs text-gray-500 mb-2 block">分類</label>
+                                        <div className="flex flex-wrap gap-3">{CATEGORIES.map(c => <button key={c.id} onClick={()=>setForm({...form, category:c.id})} className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all shadow-sm ${form.category===c.id ? `${c.color} text-white scale-110` : 'bg-gray-50 text-gray-400 border border-gray-100'}`}>{c.name}</button>)}</div>
+                                    </div>
+                                    <div><label className="text-xs text-gray-500 mb-2 block">付款方式</label><div className="flex flex-wrap gap-2">{PAYMENT_METHODS.map(p => <button key={p} onClick={()=>setForm({...form, payment:p})} className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors border ${form.payment===p ? 'border-red-400 text-red-400 bg-red-50' : 'border-gray-100 bg-gray-50 text-gray-400'}`}>{p}</button>)}</div></div>
+                                    <div><label className="text-xs text-gray-500 mb-2 block">付款人</label><div className="flex gap-2">{['小包','大包'].map(p => <button key={p} onClick={()=>setForm({...form, payer:p})} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${form.payer===p ? 'bg-red-400 text-white' : 'bg-gray-100 text-gray-400'}`}>{p}</button>)}</div></div>
+                                    <div><label className="text-xs text-gray-500 mb-1 block">備註</label><textarea value={form.note} onChange={e=>setForm({...form, note:e.target.value})} className="w-full border border-gray-200 rounded-lg p-3 outline-none focus:border-red-400 h-20 resize-none" placeholder="備註..." ></textarea></div>
+                                </div>
+                                <div className="mt-6 flex items-center justify-between">
+                                    {editingExp ? <button onClick={deleteExpense} className="flex items-center gap-1 text-red-400 px-4 py-3 rounded-xl hover:bg-red-50 transition-colors"><Icon name="trash-2" size={20} /> <span className="text-sm font-bold">刪除</span></button> : <div></div>}
+                                    <button onClick={submit} className="bg-red-400 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-red-200 active:scale-95 transition-transform flex items-center gap-2"><Icon name="save" size={18} /> {editingExp ? '更新記帳' : '新增記帳'}</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {showWishModal && (
+                        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6">
+                            <div className="bg-white w-full max-w-xs rounded-3xl p-6 shadow-2xl animate-fade-in-up">
+                                <h3 className="font-bold text-lg text-center mb-4 text-gray-700">新增預購物品</h3>
+                                <div className="space-y-4">
+                                    <div><label className="text-xs text-gray-500 mb-1 block">物品名稱</label><input type="text" value={wishForm.name} onChange={e=>setWishForm({...wishForm, name:e.target.value})} className="w-full border border-gray-200 rounded-lg p-3 outline-none focus:border-red-400" placeholder="例如: 藥妝..." autoFocus /></div>
+                                    <div>
+                                        <label className="text-xs text-gray-500 mb-1 block">照片 (點擊上傳)</label>
+                                        <div className="w-full aspect-video bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center relative overflow-hidden">
+                                            {wishForm.image ? <img src={wishForm.image} className="w-full h-full object-cover" /> : <div className="text-gray-400 flex flex-col items-center"><Icon name="camera" size={24} /><span className="text-xs mt-1">選擇照片</span></div>}
+                                            <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 mt-6"><button onClick={() => setShowWishModal(false)} className="py-3 bg-gray-100 rounded-xl font-bold text-gray-500">取消</button><button onClick={addWishItem} className="py-3 bg-red-400 rounded-xl font-bold text-white shadow-lg">新增</button></div>
+                            </div>
+                        </div>
+                    )}
+
+                    {showMemoModal && (
+                        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6">
+                            <div className="bg-white w-full sm:max-w-md rounded-3xl p-6 shadow-2xl animate-fade-in-up">
+                                <h3 className="font-bold text-lg mb-4 text-center text-gray-700">{memoForm.id ? '編輯筆記' : '新增筆記'}</h3>
+                                <div className="space-y-4">
+                                    <div><label className="text-xs text-gray-500 mb-1 block">標題 (支付方式)</label><input type="text" value={memoForm.title} onChange={e=>setMemoForm({...memoForm, title:e.target.value})} className="w-full border border-gray-200 rounded-lg p-3 outline-none focus:border-yellow-400" placeholder="例如: 玉山Wallet" autoFocus /></div>
+                                    <div>
+                                        <label className="text-xs text-gray-500 mb-1 block">卡面照片 (選填)</label>
+                                        <div className="w-full h-32 bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center relative overflow-hidden">
+                                            {memoForm.image ? <img src={memoForm.image} className="w-full h-full object-cover" /> : <div className="text-gray-400 flex flex-col items-center"><Icon name="camera" size={24} /><span className="text-xs mt-1">選擇照片</span></div>}
+                                            <input type="file" accept="image/*" onChange={handleMemoImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                        </div>
+                                    </div>
+                                    <div><label className="text-xs text-gray-500 mb-1 block">優惠內容</label><textarea value={memoForm.content} onChange={e=>setMemoForm({...memoForm, content:e.target.value})} className="w-full border border-gray-200 rounded-lg p-3 h-40 outline-none focus:border-yellow-400 resize-none font-mono text-sm" placeholder="輸入優惠詳情..."></textarea></div>
+                                </div>
+                                <div className="mt-6 flex items-center justify-between">
+                                    {memoForm.id ? <button onClick={deleteMemo} className="flex items-center gap-1 text-red-400 px-4 py-3 rounded-xl hover:bg-red-50 transition-colors"><Icon name="trash-2" size={20} /> 刪除</button> : <div></div>}
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setShowMemoModal(false)} className="py-3 px-6 bg-gray-100 rounded-xl font-bold text-gray-500">取消</button>
+                                        <button onClick={submitMemo} className="py-3 px-6 bg-yellow-400 rounded-xl font-bold text-white shadow-md">儲存</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const AiGuideView = () => {
+            const [mode, setMode] = useState('translate'); 
+            const [messages, setMessages] = useState([{ role: 'ai', content: '您好！我是您的山陰山陽 AI 導遊。' }]);
+            const [input, setInput] = useState('');
+            const [transInput, setTransInput] = useState('');
+            const [transResult, setTransResult] = useState(null);
+            const [isTyping, setIsTyping] = useState(false);
+            const messagesEndRef = useRef(null);
+
+            const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); };
+            useEffect(scrollToBottom, [messages]);
+
+            const handleSend = () => {
+                if(!input.trim()) return;
+                const userMsg = { role: 'user', content: input };
+                setMessages(prev => [...prev, userMsg]);
+                setInput('');
+                setIsTyping(true);
+                setTimeout(() => {
+                    const replyContent = `(模擬回應) 關於「${userMsg.content}」的資訊：\n這是一個非常值得一去的地方！建議您安排 2 小時左右的停留時間。`;
+                    const reply = { role: 'ai', content: replyContent, source: 'Google Search' };
+                    setMessages(prev => [...prev, reply]);
+                    setIsTyping(false);
+                }, 1200);
+            };
+
+            const handleTranslate = () => {
+                if(!transInput.trim()) return;
+                setIsTyping(true);
+                setTimeout(() => {
+                    const fakeTranslations = { '你好': { ja: 'こんにちは', rom: 'Konnichiwa' }, '謝謝': { ja: 'ありがとう', rom: 'Arigatou' }, '廁所在哪裡': { ja: 'トイレはどこですか？', rom: 'Toire wa doko desu ka?' }, '多少錢': { ja: 'いくらですか？', rom: 'Ikura desu ka?' }, '好吃': { ja: 'おいしい', rom: 'Oishii' } };
+                    const result = fakeTranslations[transInput] || { ja: `[日文] ${transInput}`, rom: '(模擬翻譯結果)' };
+                    setTransResult(result);
+                    setIsTyping(false);
+                }, 600);
+            };
+
+            return (
+                <div className="h-full flex flex-col bg-gray-50 pb-20">
+                    <div className="p-4 bg-white shadow-sm flex gap-4 sticky top-0 z-10">
+                        <button onClick={() => setMode('translate')} className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all ${mode === 'translate' ? 'bg-red-400 text-white shadow-md' : 'bg-gray-100 text-gray-500'}`}>即時翻譯</button>
+                        <button onClick={() => setMode('chat')} className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all ${mode === 'chat' ? 'bg-red-400 text-white shadow-md' : 'bg-gray-100 text-gray-500'}`}>AI 導遊</button>
+                    </div>
+                    {mode === 'chat' ? (
+                        <div className="flex-1 flex flex-col overflow-hidden">
+                            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                {messages.map((m, i) => (
+                                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} message-anim`}>
+                                        <div className={`max-w-[85%] p-3 rounded-2xl text-sm leading-relaxed ${m.role === 'user' ? 'bg-red-400 text-white rounded-br-none shadow-md' : 'bg-white shadow-sm text-gray-700 rounded-bl-none border border-gray-100'}`}>
+                                            <div className="whitespace-pre-wrap">{m.content}</div>
+                                            {m.source && <div className="mt-2 text-[10px] text-gray-400 flex items-center gap-1 border-t pt-1 border-gray-100"><Icon name="search" size={10} /> 資訊來源: {m.source}</div>}
+                                        </div>
+                                    </div>
+                                ))}
+                                {isTyping && <div className="flex justify-start message-anim"><div className="bg-white p-3 rounded-2xl rounded-bl-none shadow-sm border border-gray-100 flex gap-1 items-center"><div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div><div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-100"></div><div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-200"></div></div></div>}
+                                <div ref={messagesEndRef} />
+                            </div>
+                            <div className="p-3 bg-white border-t flex gap-2 items-center">
+                                <input type="text" value={input} onChange={e=>setInput(e.target.value)} placeholder="輸入問題..." className="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none focus:ring-2 focus:ring-red-200 transition-all" onKeyDown={e => e.key === 'Enter' && handleSend()} />
+                                <button onClick={handleSend} className="bg-red-400 text-white w-10 h-10 rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform"><Icon name="send" size={18} /></button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+                            <div className="bg-white p-4 rounded-2xl shadow-sm">
+                                <label className="text-xs text-gray-500 mb-2 block font-bold">中文輸入</label>
+                                <textarea className="w-full bg-gray-50 p-3 rounded-xl h-32 outline-none resize-none border focus:border-red-400 transition-colors text-lg" placeholder="輸入想翻譯的句子..." value={transInput} onChange={e=>setTransInput(e.target.value)}></textarea>
+                            </div>
+                            <button onClick={handleTranslate} className="w-full py-4 bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-200 active:scale-95 transition-all flex items-center justify-center gap-2">{isTyping ? <Icon name="loader-2" className="animate-spin" /> : <Icon name="languages" />} 翻譯為日文</button>
+                            {transResult && <div className="bg-white p-6 rounded-2xl shadow-lg border-2 border-red-100 animate-fade-in-up"><label className="text-xs text-red-400 mb-2 block font-bold">日文結果 (可出示給對方看)</label><div className="text-3xl font-bold text-gray-800 mb-1">{transResult.ja}</div><div className="text-sm text-gray-400 font-medium">{transResult.rom}</div></div>}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [tab, setTab] = useState('home');
+            const safeParse = (key, defaultVal) => {
+                try {
+                    const saved = localStorage.getItem(key);
+                    return saved ? JSON.parse(saved) : defaultVal;
+                } catch (e) { return defaultVal; }
+            };
+
+            const [itinerary, setItinerary] = useState(() => safeParse('trip_iti', INITIAL_ITINERARY));
+            const [expenses, setExpenses] = useState(() => safeParse('trip_exp', []));
+            const [shoppingList, setShoppingList] = useState(() => safeParse('trip_shopping', []));
+            const [paymentMemos, setPaymentMemos] = useState(() => safeParse('trip_memos', INITIAL_MEMOS));
+            
+            const safeSave = (key, val) => {
+                try { localStorage.setItem(key, JSON.stringify(val)); } 
+                catch (e) { console.error("Storage Full", e); alert("儲存空間已滿，無法儲存變更。"); }
+            };
+
+            useEffect(() => safeSave('trip_iti', itinerary), [itinerary]);
+            useEffect(() => safeSave('trip_exp', expenses), [expenses]);
+            useEffect(() => safeSave('trip_shopping', shoppingList), [shoppingList]);
+            useEffect(() => safeSave('trip_memos', paymentMemos), [paymentMemos]);
+
+            const tabs = [{id:'home',i:'home',l:'首頁'},{id:'iti',i:'calendar-days',l:'行程'},{id:'conv',i:'calculator',l:'匯率'},{id:'acc',i:'wallet',l:'記帳'},{id:'guide',i:'bot',l:'導遊'}];
+            
+            return (
+                <div className="max-w-md mx-auto h-screen bg-gray-50 flex flex-col relative overflow-hidden shadow-2xl">
+                    <div className="flex-1 overflow-y-auto no-scrollbar relative">
+                        {tab==='home'?<HomeView />:
+                         tab==='iti'?<ItineraryView itineraryData={itinerary} setItineraryData={setItinerary} />:
+                         tab==='conv'?<ConverterView />:
+                         tab==='acc'?<AccountingView expenses={expenses} setExpenses={setExpenses} shoppingList={shoppingList} setShoppingList={setShoppingList} paymentMemos={paymentMemos} setPaymentMemos={setPaymentMemos} />:
+                         <AiGuideView />}
+                    </div>
+                    <div className="bg-white border-t flex justify-around items-center pb-6 pt-3 absolute bottom-0 w-full z-40">
+                        {tabs.map(t => <button key={t.id} onClick={()=>setTab(t.id)} className={`flex flex-col items-center gap-1 w-16 transition-colors ${tab===t.id?'text-red-400':'text-gray-400'}`}><Icon name={t.i} size={24} className={tab===t.id?'stroke-2':'stroke-1'} /><span className="text-[10px] font-medium">{t.l}</span></button>)}
+                    </div>
+                </div>
+            );
+        };
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
+
+
