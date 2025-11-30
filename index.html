@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="frog-travel">
-    <title>frog-travel</title>
+    <title>frog-travel (V5.1 Debug版)</title>
     
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icon.png" />
@@ -39,6 +39,12 @@
     <div id="root"></div>
 
     <script type="text/babel">
+        // ==========================================
+        // ▼▼▼ 請在這裡貼上您的 Google API Key ▼▼▼
+        // 保留引號，將 Key 貼在引號中間，例如: "AIzaSyB..."
+        const USER_API_KEY = "AIzaSyAnKhPjH7Pbmxni_uMpsIWB7OuN74eKP0w"; 
+        // ==========================================
+
         const { useState, useEffect, useMemo, useCallback, useRef } = React;
         const Icon = ({ name, size = 20, color = "currentColor", className="", strokeWidth=2 }) => {
             useEffect(() => { lucide.createIcons(); }, [name]); 
@@ -117,9 +123,9 @@
             { id: 'education', name: '育', color: 'bg-blue-500' }, { id: 'fun', name: '樂', color: 'bg-pink-500' },
             { id: 'agent', name: '代', color: 'bg-stone-600' }, { id: 'other', name: '它', color: 'bg-slate-700' },
         ];
+
         const PAYMENT_METHODS = ['PayPay', '富邦J', '中信uniopen', '玉山unicard', '台新太陽', '現金', 'SUICA'];
 
-        // --- Components ---
         const HomeView = ({ headerImage, setHeaderImage }) => {
             const handleHeaderUpload = async (e) => {
                 const file = e.target.files[0];
@@ -262,7 +268,7 @@
             );
         };
 
-        // --- Settings Component ---
+        // --- Settings Modal (User inputs key here) ---
         const SettingsModal = ({ show, onClose, apiKey, setApiKey }) => {
             const [tempKey, setTempKey] = useState(apiKey || '');
             if (!show) return null;
@@ -270,14 +276,11 @@
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6">
                     <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-fade-in-up">
                         <h3 className="font-bold text-lg text-center mb-2 text-gray-800">API 設定</h3>
-                        <p className="text-xs text-gray-500 text-center mb-4">輸入 Google Gemini API Key 以啟用 AI 功能</p>
+                        <p className="text-xs text-gray-500 text-center mb-4">請輸入您的 Google Gemini API Key</p>
                         <input type="password" value={tempKey} onChange={e => setTempKey(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:border-red-400 text-sm mb-6" placeholder="AIza..." />
                         <div className="grid grid-cols-2 gap-3">
                             <button onClick={onClose} className="py-3 bg-gray-100 rounded-xl font-bold text-gray-500">取消</button>
                             <button onClick={() => { setApiKey(tempKey); onClose(); }} className="py-3 bg-red-400 rounded-xl font-bold text-white shadow-lg">儲存</button>
-                        </div>
-                        <div className="mt-4 text-center">
-                            <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-[10px] text-blue-400 underline">取得免費 API Key</a>
                         </div>
                     </div>
                 </div>
@@ -297,19 +300,33 @@
             const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); };
             useEffect(scrollToBottom, [messages]);
 
-            // --- Real API Calls ---
+            // Real API Call Logic
             const callGemini = async (prompt) => {
-                if (!apiKey) return null; // Fallback to simulation
+                // 優先使用用戶輸入的 Key，如果沒有則嘗試使用寫死的 Key (若有填)
+                const keyToUse = apiKey || USER_API_KEY;
+                if (!keyToUse) {
+                    alert("請先點擊右上角齒輪設定 API Key");
+                    return null;
+                }
+
                 try {
-                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                    // Using Gemini 1.5 Flash (Cost effective & fast)
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${keyToUse}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                     });
+                    
+                    if (!res.ok) {
+                        const errData = await res.json();
+                        throw new Error(errData.error?.message || 'API Request Failed');
+                    }
+
                     const data = await res.json();
                     return data.candidates[0].content.parts[0].text;
                 } catch (e) {
                     console.error("API Error", e);
+                    alert(`連線錯誤: ${e.message}`);
                     return null;
                 }
             };
@@ -321,16 +338,12 @@
                 setInput('');
                 setIsTyping(true);
 
-                const aiResponse = await callGemini(`你是一個專業的日本山陰山陽地區旅遊導遊，請簡短回答以下問題：${userMsg.content}`);
+                const aiResponse = await callGemini(`你是一個專業的日本山陰山陽地區旅遊導遊，請簡短回答以下問題(繁體中文)：${userMsg.content}`);
 
                 if (aiResponse) {
                     setMessages(prev => [...prev, { role: 'ai', content: aiResponse, source: 'Gemini AI' }]);
                 } else {
-                    // Simulation Fallback
-                    setTimeout(() => {
-                        const reply = { role: 'ai', content: '(模擬模式) 請設定 API Key 以獲得真實回答。\n關於您的問題，建議參考 Google Map 或乘換案內 App。', source: 'System' };
-                        setMessages(prev => [...prev, reply]);
-                    }, 1000);
+                    setMessages(prev => [...prev, { role: 'ai', content: '(連線失敗，請檢查 Key 或網路)', source: 'System' }]);
                 }
                 setIsTyping(false);
             };
@@ -339,25 +352,22 @@
                 if(!transInput.trim()) return;
                 setIsTyping(true);
 
-                const prompt = `Translate the following text to Japanese. Output strictly in JSON format with keys "ja" (Japanese text) and "rom" (Romaji). Text: "${transInput}"`;
+                // Prompt engineering for translation
+                const prompt = `Translate this text to Japanese: "${transInput}". 
+                Output ONLY valid JSON format: {"ja": "Japanese Text", "rom": "Romaji Pronunciation"}.`;
+                
                 const aiJsonString = await callGemini(prompt);
 
                 if (aiJsonString) {
                     try {
-                        // Clean up markdown code blocks if present
+                        // Remove markdown formatting if present
                         const cleanJson = aiJsonString.replace(/```json/g, '').replace(/```/g, '').trim();
                         const result = JSON.parse(cleanJson);
                         setTransResult(result);
                     } catch (e) {
+                        // Fallback if JSON parse fails
                         setTransResult({ ja: aiJsonString, rom: '' });
                     }
-                } else {
-                    // Simulation Fallback
-                    setTimeout(() => {
-                        const fakeTranslations = { '你好': { ja: 'こんにちは', rom: 'Konnichiwa' }, '謝謝': { ja: 'ありがとう', rom: 'Arigatou' }, '廁所在哪裡': { ja: 'トイレはどこですか？', rom: 'Toire wa doko desu ka?' }, '多少錢': { ja: 'いくらですか？', rom: 'Ikura desu ka?' }, '好吃': { ja: 'おいしい', rom: 'Oishii' } };
-                        const result = fakeTranslations[transInput] || { ja: `[日文] ${transInput}`, rom: '(模擬翻譯結果 - 請設定 API Key)' };
-                        setTransResult(result);
-                    }, 600);
                 }
                 setIsTyping(false);
             };
@@ -400,50 +410,6 @@
                         </div>
                     )}
                     <SettingsModal show={showSettings} onClose={()=>setShowSettings(false)} apiKey={apiKey} setApiKey={setApiKey} />
-                </div>
-            );
-        };
-
-        const AccountingView = ({ expenses, setExpenses, shoppingList = [], setShoppingList, paymentMemos, setPaymentMemos }) => {
-            // ... (Existing Accounting Logic - No changes needed, kept for context) ...
-            const [viewMode, setViewMode] = useState('expenses'); 
-            const [showModal, setShowModal] = useState(false);
-            const [editingExp, setEditingExp] = useState(null);
-            const [form, setForm] = useState({ amount:'', currency:'JPY', category:'food', item:'', payment:'現金', payer:'小包', note:'' });
-            const totalJPY = expenses.filter(e => e.currency === 'JPY').reduce((sum, e) => sum + Number(e.amount), 0);
-            const totalTWD = expenses.filter(e => e.currency === 'TWD').reduce((sum, e) => sum + Number(e.amount), 0);
-            const openModal = (exp = null) => { if(exp) { setEditingExp(exp); setForm(exp); } else { setEditingExp(null); setForm({ amount:'', currency:'JPY', category:'food', item:'', payment:'現金', payer:'小包', note:'' }); } setShowModal(true); };
-            const submit = () => { if(!form.amount || !form.item) return alert("請輸入金額與品項"); const newExp = { ...form, id: editingExp ? editingExp.id : Date.now(), timestamp: editingExp ? editingExp.timestamp : new Date().toISOString() }; setExpenses(prev => editingExp ? prev.map(e => e.id === newExp.id ? newExp : e) : [newExp, ...prev]); setShowModal(false); };
-            const deleteExpense = () => { if(confirm("確定要刪除這筆支出嗎？")) { setExpenses(prev => prev.filter(e => e.id !== editingExp.id)); setShowModal(false); } };
-            const exportExpensesCSV = () => { const csv = "\uFEFF時間,分類,品項,金額,幣別,付款方式,付款人,備註\n" + expenses.map(e => `${formatDateTime24h(e.timestamp)},${CATEGORIES.find(c=>c.id===e.category)?.name},${e.item},${e.amount},${e.currency},${e.payment},${e.payer},${e.note}`).join("\n"); const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })); link.download = `JapanTrip_Expenses_${new Date().toISOString().slice(0,10)}.csv`; link.click(); };
-            const formatMoney = (amount) => Number(amount).toLocaleString();
-            const [showWishModal, setShowWishModal] = useState(false);
-            const [wishForm, setWishForm] = useState({ name: '', image: null });
-            const addWishItem = () => { if(!wishForm.name) return; setShoppingList(prev => [...prev, { id: Date.now(), name: wishForm.name, image: wishForm.image, bought: false }]); setShowWishModal(false); setWishForm({ name: '', image: null }); };
-            const toggleBought = (id) => { setShoppingList(prev => prev.map(item => item.id === id ? { ...item, bought: !item.bought } : item)); };
-            const deleteWishItem = (id) => { if(confirm("移除此預購項目？")) setShoppingList(prev => prev.filter(item => item.id !== id)); };
-            const handleImageUpload = async (e) => { const file = e.target.files[0]; if (file) { try { const compressed = await resizeImage(file); setWishForm(prev => ({ ...prev, image: compressed })); } catch (error) { alert("圖片處理失敗"); } } };
-            const exportShoppingListCSV = () => { const csv = "\uFEFF狀態,物品名稱\n" + shoppingList.map(item => `${item.bought ? '已購買' : '未購買'},${item.name}`).join("\n"); const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })); link.download = `JapanTrip_ShoppingList_${new Date().toISOString().slice(0,10)}.csv`; link.click(); };
-            const [showMemoModal, setShowMemoModal] = useState(false);
-            const [memoForm, setMemoForm] = useState({ id: null, title: '', content: '', image: null });
-            const openMemoModal = (memo = null) => { if (memo) setMemoForm(memo); else setMemoForm({ id: null, title: '', content: '', image: null }); setShowMemoModal(true); };
-            const submitMemo = () => { if (!memoForm.title) return alert("請輸入標題"); const newMemo = { ...memoForm, id: memoForm.id || Date.now() }; setPaymentMemos(prev => memoForm.id ? prev.map(m => m.id === newMemo.id ? newMemo : m) : [newMemo, ...prev]); setShowMemoModal(false); };
-            const deleteMemo = () => { if (confirm("確定刪除此筆記？")) { setPaymentMemos(prev => prev.filter(m => m.id !== memoForm.id)); setShowMemoModal(false); } };
-            const moveMemo = (index, direction) => { const newMemos = [...paymentMemos]; if (direction === -1 && index > 0) { [newMemos[index], newMemos[index - 1]] = [newMemos[index - 1], newMemos[index]]; } else if (direction === 1 && index < newMemos.length - 1) { [newMemos[index], newMemos[index + 1]] = [newMemos[index + 1], newMemos[index]]; } setPaymentMemos(newMemos); };
-            const handleMemoImageUpload = async (e) => { const file = e.target.files[0]; if (file) { try { const compressed = await resizeImage(file); setMemoForm(prev => ({ ...prev, image: compressed })); } catch (error) { alert("圖片處理失敗"); } } };
-
-            return (
-                <div className="h-full flex flex-col bg-gray-50 pb-20">
-                    <div className="flex flex-col p-4 bg-gray-50 sticky top-0 z-10 gap-3">
-                        <div className="flex justify-between items-center"><h2 className="text-xl font-bold text-gray-800">記帳中心</h2><div className="flex gap-2">{(viewMode === 'expenses' || viewMode === 'wishlist') && (<button onClick={viewMode === 'expenses' ? exportExpensesCSV : exportShoppingListCSV} className="w-8 h-8 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 shadow-sm"><Icon name="file-down" size={16}/></button>)}<button onClick={() => { if (viewMode === 'expenses') openModal(); else if (viewMode === 'wishlist') setShowWishModal(true); else openMemoModal(); }} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-400 text-white shadow-md"><Icon name="plus" size={18}/></button></div></div>
-                        <div className="flex bg-gray-200 p-1 rounded-xl"><button onClick={()=>setViewMode('expenses')} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode==='expenses' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}>支出紀錄</button><button onClick={()=>setViewMode('wishlist')} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode==='wishlist' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}>購物清單</button><button onClick={()=>setViewMode('memo')} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode==='memo' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'}`}>優惠筆記</button></div>
-                    </div>
-                    {viewMode === 'expenses' && (<><div className="px-4 grid grid-cols-2 gap-3 mb-4"><div className="bg-white p-4 rounded-xl shadow-sm border-b-4 border-red-400"><div className="text-xs text-gray-500 mb-1">總支出 (日幣)</div><div className="text-2xl font-bold text-gray-800 tracking-tight">{formatMoney(totalJPY)}</div></div><div className="bg-white p-4 rounded-xl shadow-sm border-b-4 border-red-400"><div className="text-xs text-gray-500 mb-1">總支出 (台幣)</div><div className="text-2xl font-bold text-gray-800 tracking-tight">{formatMoney(totalTWD)}</div></div></div><div className="px-4 space-y-3 overflow-y-auto flex-1">{expenses.length===0 && <div className="text-center text-gray-400 mt-10 text-sm">點擊右上角 + 新增第一筆支出</div>}{expenses.map(e => { const cat = CATEGORIES.find(c=>c.id===e.category); const dateObj = new Date(e.timestamp); const dateStr = `${(dateObj.getMonth()+1)}/${dateObj.getDate()}`; return ( <div key={e.id} className="bg-white p-2.5 rounded-xl shadow-sm relative group active:scale-[0.99] transition-transform" onClick={() => openModal(e)}> <div className="flex justify-between items-start mb-1"> <div className="font-bold text-gray-800 text-base truncate pr-2 flex-1">{e.item}</div> <div className="font-bold text-red-500 text-xl whitespace-nowrap leading-none">{formatMoney(e.amount)} <span className="text-xs font-normal text-gray-400">{e.currency}</span></div> </div> <div className="flex items-center gap-2 overflow-x-auto no-scrollbar text-[10px]"> <span className={`px-2 py-0.5 rounded-full text-white ${cat.color} shrink-0`}>{cat.name}</span> <span className="text-gray-400 shrink-0">{dateStr}</span> <div className="w-px h-3 bg-gray-200 shrink-0"></div> <span className="px-1.5 py-0.5 border rounded text-gray-500 border-gray-200 shrink-0">{e.payment}</span> <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-500 rounded font-bold shrink-0">{e.payer}</span> {e.note && <span className="text-gray-300 truncate max-w-[100px] italic ml-1">· {e.note}</span>} </div> <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity text-gray-300"><Icon name="edit-3" size={14}/></div> </div> ) })}</div></>)}
-                    {viewMode === 'wishlist' && (<div className="px-4 grid grid-cols-2 gap-3 overflow-y-auto flex-1 content-start pb-4">{(shoppingList || []).length === 0 && <div className="col-span-2 text-center text-gray-400 mt-10 text-sm">尚無購物清單，點擊右上角 + 新增</div>}{(shoppingList || []).map(item => (<div key={item.id} className={`bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col relative transition-all ${item.bought ? 'grayscale-[50%]' : ''}`}><div className="aspect-square bg-gray-100 flex items-center justify-center overflow-hidden relative group">{item.image ? <img src={item.image} alt={item.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" /> : <Icon name="image" size={32} className="text-gray-300" />}<button onClick={(e) => { e.stopPropagation(); toggleBought(item.id); }} className={`absolute bottom-2 right-2 text-[10px] px-2 py-1 rounded-full font-bold shadow-md backdrop-blur-md transition-all active:scale-95 flex items-center gap-1 ${item.bought ? 'bg-green-500 text-white' : 'bg-white/80 text-gray-600 hover:bg-white'}`}>{item.bought && <Icon name="check" size={10} strokeWidth={3}/>} {item.bought ? '已買' : '未買'}</button></div><div className="px-3 py-2.5 flex items-center justify-between bg-white"><div className="font-bold text-gray-800 text-sm truncate flex-1 pr-2">{item.name}</div><button onClick={() => deleteWishItem(item.id)} className="text-gray-300 hover:text-red-400 p-1 -mr-1 rounded-full hover:bg-red-50 transition-colors shrink-0"><Icon name="trash-2" size={16}/></button></div></div>))}</div>)}
-                    {viewMode === 'memo' && (<div className="px-4 space-y-4 overflow-y-auto flex-1 pb-4">{(paymentMemos || []).length === 0 && <div className="text-center text-gray-400 mt-10 text-sm">尚無筆記，點擊右上角 + 新增</div>}{(paymentMemos || []).map((memo, idx) => (<div key={memo.id} onClick={() => openMemoModal(memo)} className="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-yellow-400 active:scale-[0.99] transition-transform cursor-pointer relative group"><div className="flex justify-between items-center mb-2 border-b pb-2 border-gray-100"><div className="flex items-center gap-3">{memo.image && <img src={memo.image} className="w-16 h-10 object-cover rounded-md border border-gray-200" />}<h3 className="font-bold text-gray-800 text-lg">{memo.title}</h3></div><div className="flex items-center gap-2">{idx > 0 && <button onClick={(e) => { e.stopPropagation(); moveMemo(idx, -1); }} className="p-1 text-gray-300 hover:text-gray-500 hover:bg-gray-100 rounded"><Icon name="arrow-up" size={14} /></button>}{idx < paymentMemos.length - 1 && <button onClick={(e) => { e.stopPropagation(); moveMemo(idx, 1); }} className="p-1 text-gray-300 hover:text-gray-500 hover:bg-gray-100 rounded"><Icon name="arrow-down" size={14} /></button>}<div className="w-px h-3 bg-gray-200 mx-1"></div><Icon name="edit-2" size={14} className="text-gray-300" /></div></div><div className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed font-mono bg-gray-50 p-2 rounded-lg">{memo.content}</div></div>))}</div>)}
-                    {showModal && (<div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center"><div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 h-[85vh] sm:h-auto overflow-y-auto animate-fade-in-up flex flex-col"><div className="flex justify-between items-center mb-1"><h3 className="text-xl font-bold text-gray-800">新增支出</h3><button onClick={()=>setShowModal(false)} className="text-gray-400"><Icon name="x" size={24} /></button></div><div className="text-xs text-gray-400 mb-6">記帳時間: {new Date().toLocaleString()}</div><div className="space-y-5 flex-1"><div className="flex gap-3"><div className="flex-1"><label className="text-xs text-gray-500 mb-1 block">金額</label><input type="number" value={form.amount} onChange={e=>setForm({...form, amount:e.target.value})} className="w-full border border-gray-200 rounded-lg p-3 text-lg font-bold outline-none focus:border-red-400" placeholder="0" autoFocus /></div><div className="w-24"><label className="text-xs text-gray-500 mb-1 block">幣別</label><select value={form.currency} onChange={e=>setForm({...form, currency:e.target.value})} className="w-full border border-gray-200 rounded-lg p-3 text-lg font-bold outline-none bg-white"><option value="JPY">JPY</option><option value="TWD">TWD</option></select></div></div><div><label className="text-xs text-gray-500 mb-1 block">品項</label><input type="text" value={form.item} onChange={e=>setForm({...form, item:e.target.value})} className="w-full border border-gray-200 rounded-lg p-3 outline-none focus:border-red-400" placeholder="例如: 廣島燒午餐" /></div><div><label className="text-xs text-gray-500 mb-2 block">分類</label><div className="flex flex-wrap gap-3">{CATEGORIES.map(c => <button key={c.id} onClick={()=>setForm({...form, category:c.id})} className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all shadow-sm ${form.category===c.id ? `${c.color} text-white scale-110` : 'bg-gray-50 text-gray-400 border border-gray-100'}`}>{c.name}</button>)}</div></div><div><label className="text-xs text-gray-500 mb-2 block">付款方式</label><div className="flex flex-wrap gap-2">{PAYMENT_METHODS.map(p => <button key={p} onClick={()=>setForm({...form, payment:p})} className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors border ${form.payment===p ? 'border-red-400 text-red-400 bg-red-50' : 'border-gray-100 bg-gray-50 text-gray-400'}`}>{p}</button>)}</div></div><div><label className="text-xs text-gray-500 mb-2 block">付款人</label><div className="flex gap-2">{['小包','大包'].map(p => <button key={p} onClick={()=>setForm({...form, payer:p})} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${form.payer===p ? 'bg-red-400 text-white' : 'bg-gray-100 text-gray-400'}`}>{p}</button>)}</div></div><div><label className="text-xs text-gray-500 mb-1 block">備註</label><textarea value={form.note} onChange={e=>setForm({...form, note:e.target.value})} className="w-full border border-gray-200 rounded-lg p-3 outline-none focus:border-red-400 h-20 resize-none" placeholder="備註..." ></textarea></div></div><div className="mt-6 flex items-center justify-between">{editingExp ? <button onClick={deleteExpense} className="flex items-center gap-1 text-red-400 px-4 py-3 rounded-xl hover:bg-red-50 transition-colors"><Icon name="trash-2" size={20} /> <span className="text-sm font-bold">刪除</span></button> : <div></div>}<button onClick={submit} className="bg-red-400 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-red-200 active:scale-95 transition-transform flex items-center gap-2"><Icon name="save" size={18} /> {editingExp ? '更新記帳' : '新增記帳'}</button></div></div></div>)}
-                    {showWishModal && (<div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6"><div className="bg-white w-full max-w-xs rounded-3xl p-6 shadow-2xl animate-fade-in-up"><h3 className="font-bold text-lg text-center mb-4 text-gray-700">新增購物物品</h3><div className="space-y-4"><div><label className="text-xs text-gray-500 mb-1 block">物品名稱</label><input type="text" value={wishForm.name} onChange={e=>setWishForm({...wishForm, name:e.target.value})} className="w-full border border-gray-200 rounded-lg p-3 outline-none focus:border-red-400" placeholder="例如: 藥妝..." autoFocus /></div><div><label className="text-xs text-gray-500 mb-1 block">照片 (點擊上傳)</label><div className="w-full aspect-video bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center relative overflow-hidden">{wishForm.image ? <img src={wishForm.image} className="w-full h-full object-cover" /> : <div className="text-gray-400 flex flex-col items-center"><Icon name="camera" size={24} /><span className="text-xs mt-1">選擇照片</span></div>}<input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" /></div></div></div><div className="grid grid-cols-2 gap-3 mt-6"><button onClick={() => setShowWishModal(false)} className="py-3 bg-gray-100 rounded-xl font-bold text-gray-500">取消</button><button onClick={addWishItem} className="py-3 bg-red-400 rounded-xl font-bold text-white shadow-lg">新增</button></div></div></div>)}
-                    {showMemoModal && (<div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6"><div className="bg-white w-full sm:max-w-md rounded-3xl p-6 shadow-2xl animate-fade-in-up"><h3 className="font-bold text-lg mb-4 text-center text-gray-700">{memoForm.id ? '編輯筆記' : '新增筆記'}</h3><div className="space-y-4"><div><label className="text-xs text-gray-500 mb-1 block">標題 (支付方式)</label><input type="text" value={memoForm.title} onChange={e=>setMemoForm({...memoForm, title:e.target.value})} className="w-full border border-gray-200 rounded-lg p-3 outline-none focus:border-yellow-400" placeholder="例如: 玉山Wallet" autoFocus /></div><div><label className="text-xs text-gray-500 mb-1 block">卡面照片 (選填)</label><div className="w-full h-32 bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center relative overflow-hidden">{memoForm.image ? <img src={memoForm.image} className="w-full h-full object-cover" /> : <div className="text-gray-400 flex flex-col items-center"><Icon name="camera" size={24} /><span className="text-xs mt-1">選擇照片</span></div>}<input type="file" accept="image/*" onChange={handleMemoImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" /></div></div><div><label className="text-xs text-gray-500 mb-1 block">優惠內容</label><textarea value={memoForm.content} onChange={e=>setMemoForm({...memoForm, content:e.target.value})} className="w-full border border-gray-200 rounded-lg p-3 h-40 outline-none focus:border-yellow-400 resize-none font-mono text-sm" placeholder="輸入優惠詳情..."></textarea></div></div><div className="mt-6 flex items-center justify-between">{memoForm.id ? <button onClick={deleteMemo} className="flex items-center gap-1 text-red-400 px-4 py-3 rounded-xl hover:bg-red-50 transition-colors"><Icon name="trash-2" size={20} /> 刪除</button> : <div></div>}<div className="flex gap-2"><button onClick={() => setShowMemoModal(false)} className="py-3 px-6 bg-gray-100 rounded-xl font-bold text-gray-500">取消</button><button onClick={submitMemo} className="py-3 px-6 bg-yellow-400 rounded-xl font-bold text-white shadow-md">儲存</button></div></div></div></div>)}
                 </div>
             );
         };
