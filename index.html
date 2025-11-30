@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="frog-travel">
-    <title>frog-travel (V10.2 垂直優化版)</title>
+    <title>frog-travel (V9.7 最終穩定版)</title>
     
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icon.png" />
@@ -55,7 +55,7 @@
                             <div className="bg-white p-6 rounded-3xl shadow-xl border-2 border-red-100">
                                 <div className="text-4xl mb-4">😵</div>
                                 <h1 className="text-xl font-bold text-gray-800 mb-2">發生錯誤</h1>
-                                <p className="text-gray-500 mb-6 text-sm">偵測到程式崩潰（請清除資料或重新整理）。</p>
+                                <p className="text-gray-500 mb-6 text-sm">偵測到程式崩潰（可能是圖片檔案太大或資料格式錯誤）。<br/>請點擊下方按鈕嘗試修復。</p>
                                 <button onClick={this.resetData} className="bg-red-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg active:scale-95 w-full mb-3">🗑️ 清除資料並修復</button>
                                 <button onClick={() => window.location.reload()} className="text-gray-400 text-xs underline">嘗試重新整理</button>
                             </div>
@@ -155,7 +155,7 @@
                 }
             };
             return (
-                <div className="space-y-4 pb-12"> {/* V10.2 Padding reduced */}
+                <div className="space-y-4 pb-24">
                     <div className="w-full h-48 bg-gray-200 rounded-b-3xl overflow-hidden relative shadow-md group">
                         <img src={headerImage || "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?ixlib=rb-4.0.3&w=800&q=80"} className="w-full h-full object-cover" />
                         <label className="absolute bottom-3 right-3 bg-black/30 backdrop-blur-md p-2 rounded-full cursor-pointer hover:bg-black/50 transition-colors"><Icon name="camera" size={20} className="text-white" /><input type="file" accept="image/*" onChange={handleHeaderUpload} className="hidden" /></label>
@@ -234,13 +234,12 @@
             };
 
             return (
-                <div className="h-full flex flex-col pb-12"> {/* V10.2 Padding reduced */}
+                <div className="h-full flex flex-col pb-20">
                     <div className="bg-white shadow-sm pt-4 pb-2 px-2 sticky top-0 z-10"><div className="flex overflow-x-auto no-scrollbar gap-3 px-2">{dates.map((d, i) => <button key={i} onClick={() => setSelectedDate(d.toISOString().split('T')[0])} className={`flex-shrink-0 flex flex-col items-center justify-center w-16 h-20 rounded-2xl transition-all ${d.toISOString().split('T')[0] === selectedDate ? 'bg-red-400 text-white shadow-md scale-105' : 'bg-gray-50 text-gray-400'}`}><span className="text-xs font-bold opacity-80">DAY {i+1}</span><span className="text-lg font-bold">{d.getMonth()+1}/{d.getDate()}</span></button>)}</div></div>
                     <div className="p-4 flex-1 overflow-y-auto">
                         <div className="bg-white border border-blue-100 rounded-2xl p-3 shadow-sm mb-4 flex items-center gap-4"><div className="flex items-center gap-2 pl-2"><Icon name={weather.code > 3 ? "cloud-rain" : "cloud-sun"} size={32} className="text-blue-500" /><span className="text-3xl font-bold text-gray-800 tracking-tight">{weather.temp}°</span></div><div className="w-px h-8 bg-gray-100"></div><div className="flex-1 flex flex-col justify-center gap-0.5 text-xs text-gray-500"><div className="flex items-center gap-1 font-bold text-gray-700"><Icon name="map-pin" size={10} className="text-red-400"/> {weather.location}</div><div>H:{weather.max}° L:{weather.min}°</div><div className="flex items-center gap-2"><span>體感 {weather.feels}°</span><span className="text-gray-200">|</span><span className="flex items-center gap-1"><Icon name="droplets" size={10} className="text-blue-300"/> {weather.humidity}%</span></div></div></div>
                         <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-gray-700">行程總覽</h3><div className="flex gap-2"><button onClick={exportItineraryCSV} className="text-xs px-3 py-1 rounded-full border bg-white text-gray-500 flex items-center gap-1 active:scale-95"><Icon name="file-down" size={14} /> 匯出</button><button onClick={() => setIsEditMode(!isEditMode)} className={`text-xs px-3 py-1 rounded-full border ${isEditMode ? 'bg-red-400 text-white' : 'bg-white text-gray-500'}`}>{isEditMode ? '完成' : '編輯'}</button></div></div>
                         
-                        {/* V9.2: 經典時間軸 UI */}
                         <div className="space-y-4 relative pl-2">
                             {daysEvents.map((item, idx) => {
                                 const style = getTypeStyle(item.type);
@@ -264,7 +263,7 @@
                             {isEditMode && <button onClick={() => setEditingItem({id:null, time:'12:00', type:'spot', title:'', note:''})} className="w-full py-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 flex justify-center items-center gap-2 hover:bg-gray-50 mt-4"><Icon name="plus" /> 新增行程</button>}
                         </div>
                     </div>
-                    {editingItem && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"><form onSubmit={handleSave} className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-fade-in-up"><h3 className="font-bold text-lg mb-4 text-center">{editingItem.id?'編輯':'新增'}行程</h3><div className="space-y-3"><div className="grid grid-cols-5 gap-2"><div className="col-span-3 flex gap-1 items-center bg-gray-50 p-3 rounded-xl border"><select name="hour" defaultValue={editingItem.time.split(':')[0]} className="bg-transparent outline-none text-center font-bold text-lg w-full appearance-none text-gray-700">{hours.map(h=><option key={h} value={h}>{h}</option>)}</select><span className="font-bold text-gray-400">:</span><select name="minute" defaultValue={editingItem.time.split(':')[1]} className="bg-transparent outline-none text-center font-bold text-lg w-full appearance-none text-gray-700">{minutes.map(m=><option key={m} value={m}>{m}</option>)}</select></div><select name="type" defaultValue={editingItem.type} className="col-span-2 bg-gray-50 p-3 rounded-xl border w-full text-sm font-bold text-gray-600"><option value="spot">景點</option><option value="move">移動</option><option value="shopping">購物</option><option value="food">餐廳</option><option value="hotel">住宿</option></select></div><input type="text" name="title" placeholder="地點名稱" defaultValue={editingItem.title} className="w-full bg-gray-50 p-3 rounded-xl border" required /><input type="text" name="note" placeholder="備註" defaultValue={editingItem.note} className="w-full bg-gray-50 p-3 rounded-xl border" /></div><div className="grid grid-cols-2 gap-3 mt-6"><button type="button" onClick={()=>setEditingItem(null)} className="py-3 bg-gray-100 rounded-xl font-bold text-gray-500">取消</button><button type="submit" className="py-3 bg-red-400 rounded-xl font-bold text-white">儲存</button></div></form></div>}
+                    {editingItem && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><form onSubmit={handleSave} className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-fade-in-up"><h3 className="font-bold text-lg mb-4 text-center">{editingItem.id?'編輯':'新增'}行程</h3><div className="space-y-3"><div className="grid grid-cols-5 gap-2"><div className="col-span-3 flex gap-1 items-center bg-gray-50 p-3 rounded-xl border"><select name="hour" defaultValue={editingItem.time.split(':')[0]} className="bg-transparent outline-none text-center font-bold text-lg w-full appearance-none text-gray-700">{hours.map(h=><option key={h} value={h}>{h}</option>)}</select><span className="font-bold text-gray-400">:</span><select name="minute" defaultValue={editingItem.time.split(':')[1]} className="bg-transparent outline-none text-center font-bold text-lg w-full appearance-none text-gray-700">{minutes.map(m=><option key={m} value={m}>{m}</option>)}</select></div><select name="type" defaultValue={editingItem.type} className="col-span-2 bg-gray-50 p-3 rounded-xl border w-full text-sm font-bold text-gray-600"><option value="spot">景點</option><option value="move">移動</option><option value="shopping">購物</option><option value="food">餐廳</option><option value="hotel">住宿</option></select></div><input type="text" name="title" placeholder="地點名稱" defaultValue={editingItem.title} className="w-full bg-gray-50 p-3 rounded-xl border" required /><input type="text" name="note" placeholder="備註" defaultValue={editingItem.note} className="w-full bg-gray-50 p-3 rounded-xl border" /></div><div className="grid grid-cols-2 gap-3 mt-6"><button type="button" onClick={()=>setEditingItem(null)} className="py-3 bg-gray-100 rounded-xl font-bold text-gray-500">取消</button><button type="submit" className="py-3 bg-red-400 rounded-xl font-bold text-white">儲存</button></div></form></div>}
                 </div>
             );
         };
@@ -312,7 +311,7 @@
             const [editingExp, setEditingExp] = useState(null);
             const [form, setForm] = useState({ amount:'', currency:'JPY', category:'food', item:'', payment:'現金', payer:'小包', note:'' });
             
-            const safeExpenses = ArrayArray(expenses) ? expenses : [];
+            const safeExpenses = Array.isArray(expenses) ? expenses : [];
             const totalJPY = safeExpenses.filter(e => e.currency === 'JPY').reduce((sum, e) => sum + Number(e.amount), 0);
             const totalTWD = safeExpenses.filter(e => e.currency === 'TWD').reduce((sum, e) => sum + Number(e.amount), 0);
 
@@ -339,9 +338,7 @@
                 setShowWishModal(false); setWishForm({ name: '', image: null });
             };
 
-            // V10.1 刪除所有狀態邏輯
-            const deleteWishItem = (id) => { if(confirm("移除此預購項目？")) setShoppingList(prev => prev.filter(item => item.id !== id)); };
-            
+            const deleteWishItem = (id) => { if(confirm("移除此項目？")) setShoppingList(prev => prev.filter(item => item.id !== id)); };
             const handleImageUpload = async (e) => {
                 const file = e.target.files[0];
                 if (file) {
@@ -441,7 +438,7 @@
                                             <Icon name="image" size={32} className="text-gray-300" />
                                         )}
                                         
-                                        {/* V10.1: 移除所有狀態相關按鈕和標籤 */}
+                                        {/* V10.0: 移除所有狀態相關按鈕和標籤 */}
                                     </div>
                                     <div className="px-3 py-2.5 flex items-center justify-between bg-white">
                                         <div className="font-bold text-gray-800 text-sm truncate flex-1 pr-2">{item.name}</div>
@@ -553,8 +550,8 @@
             );
         };
 
-        const AiGuideView = () => {
-            const [mode, setMode] = useState('search'); 
+        const QueryView = () => {
+            const [mode, setMode] = useState('translate'); 
             const [input, setInput] = useState('');
             const [transInput, setTransInput] = useState('');
 
@@ -650,9 +647,9 @@
                              tab==='iti'?<ItineraryView itineraryData={itinerary} setItineraryData={setItinerary} />:
                              tab==='conv'?<ConverterView />:
                              tab==='acc'?<AccountingView expenses={expenses} setExpenses={setExpenses} shoppingList={shoppingList} setShoppingList={setShoppingList} paymentMemos={paymentMemos} setPaymentMemos={setPaymentMemos} />:
-                             <AiGuideView />}
+                             <QueryView />}
                         </div>
-                        <div className="bg-white border-t flex justify-around items-center pt-3 pb-3 absolute bottom-0 w-full z-40">
+                        <div className="bg-white border-t flex justify-around items-center pb-6 pt-3 absolute bottom-0 w-full z-40">
                             {tabs.map(t => <button key={t.id} onClick={()=>setTab(t.id)} className={`flex flex-col items-center gap-1 w-16 transition-colors ${tab===t.id?'text-red-400':'text-gray-400'}`}><Icon name={t.i} size={24} className={tab===t.id?'stroke-2':'stroke-1'} /><span className="text-[10px] font-medium">{t.l}</span></button>)}
                         </div>
                     </div>
@@ -663,3 +660,5 @@
     </script>
 </body>
 </html>
+
+
