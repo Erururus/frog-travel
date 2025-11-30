@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="frog-travel">
-    <title>frog-travel (V7.2 購物修復版)</title>
+    <title>frog-travel (V9.0 重構核心版)</title>
     
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icon.png" />
@@ -25,9 +25,7 @@
         body { background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #374151; }
         input, select, textarea { font-size: 16px; }
         @keyframes fade-in-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes fade-in-scale { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         .animate-fade-in-up { animation: fade-in-up 0.3s ease-out; }
-        .animate-fade-in-scale { animation: fade-in-scale 0.2s ease-out; }
     </style>
     <script>
         tailwind.config = { theme: { extend: { colors: { primary: '#f87171' } } } }
@@ -38,6 +36,34 @@
 
     <script type="text/babel">
         const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+        // --- 錯誤邊界 (最後一道防線) ---
+        class ErrorBoundary extends React.Component {
+            constructor(props) { super(props); this.state = { hasError: false }; }
+            static getDerivedStateFromError(error) { return { hasError: true }; }
+            componentDidCatch(error, errorInfo) { console.error("Crash:", error); }
+            resetData = () => {
+                if(confirm("確定要重置資料以修復 App 嗎？")) {
+                    localStorage.clear();
+                    window.location.reload();
+                }
+            }
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="h-screen flex flex-col items-center justify-center p-8 text-center bg-gray-50">
+                            <div className="bg-white p-6 rounded-2xl shadow-lg">
+                                <h1 className="text-xl font-bold text-gray-800 mb-2">程式發生錯誤</h1>
+                                <button onClick={this.resetData} className="bg-red-500 text-white px-6 py-3 rounded-xl font-bold w-full mb-3">重置資料</button>
+                                <button onClick={() => window.location.reload()} className="text-gray-400 text-sm underline">重新整理</button>
+                            </div>
+                        </div>
+                    );
+                }
+                return this.props.children; 
+            }
+        }
+
         const Icon = ({ name, size = 20, color = "currentColor", className="", strokeWidth=2 }) => {
             useEffect(() => { lucide.createIcons(); }, [name]); 
             return <i data-lucide={name} width={size} height={size} stroke={color} stroke-width={strokeWidth} className={className}></i>;
@@ -50,7 +76,8 @@
             return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
         };
 
-        const resizeImage = (file, maxWidth = 300) => {
+        // V9.0: 圖片限制 200px, 品質 0.3 (極度輕量化)
+        const resizeImage = (file, maxWidth = 200) => {
             return new Promise((resolve) => {
                 const reader = new FileReader();
                 reader.onload = (event) => {
@@ -64,7 +91,7 @@
                         canvas.height = height;
                         const ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0, width, height);
-                        resolve(canvas.toDataURL('image/jpeg', 0.5)); // 低畫質壓縮以防崩潰
+                        resolve(canvas.toDataURL('image/jpeg', 0.3));
                     };
                     img.src = event.target.result;
                 };
@@ -131,12 +158,12 @@
                 <div className="space-y-4 pb-24">
                     <div className="w-full h-48 bg-gray-200 rounded-b-3xl overflow-hidden relative shadow-md group">
                         <img src={headerImage || "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?ixlib=rb-4.0.3&w=800&q=80"} className="w-full h-full object-cover" />
-                        <label className="absolute bottom-3 right-3 bg-black/30 backdrop-blur-md p-2 rounded-full cursor-pointer hover:bg-black/50 transition-colors"><Icon name="camera" size={20} className="text-white" /><input type="file" accept="image/*" onChange={handleHeaderUpload} className="hidden" /></label>
+                        <label className="absolute bottom-3 right-3 bg-black/30 p-2 rounded-full cursor-pointer"><Icon name="camera" size={20} className="text-white" /><input type="file" accept="image/*" onChange={handleHeaderUpload} className="hidden" /></label>
                     </div>
                     <div className="px-4 space-y-4">
                         <div className="grid grid-cols-2 gap-4">
-                            <a href={INITIAL_TRIP_DATA.links.visitJapan} target="_blank" className="bg-white p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center space-y-2 active:scale-95 transition-transform"><Icon name="qr-code" className="text-blue-500" size={32} /> <span className="text-blue-500 font-bold text-sm">Visit Japan Web</span></a>
-                            <a href={INITIAL_TRIP_DATA.links.myMap} target="_blank" className="bg-white p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center space-y-2 active:scale-95 transition-transform"><Icon name="map" className="text-rose-400" size={32} /> <span className="text-rose-400 font-bold text-sm">我的地圖</span></a>
+                            <a href={INITIAL_TRIP_DATA.links.visitJapan} target="_blank" className="bg-white p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center active:scale-95 transition-transform"><Icon name="qr-code" className="text-blue-500" size={32} /> <span className="text-blue-500 font-bold text-sm">Visit Japan Web</span></a>
+                            <a href={INITIAL_TRIP_DATA.links.myMap} target="_blank" className="bg-white p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center active:scale-95 transition-transform"><Icon name="map" className="text-rose-400" size={32} /> <span className="text-rose-400 font-bold text-sm">我的地圖</span></a>
                         </div>
                         <div className="bg-white rounded-2xl p-3 shadow-sm">
                             <h3 className="font-bold text-gray-700 mb-2 flex items-center gap-2"><Icon name="plane" size={18} /> 航班資訊</h3>
@@ -196,7 +223,8 @@
             const handleSave = (e) => {
                 e.preventDefault(); const form = e.target;
                 const combinedTime = `${form.hour.value}:${form.minute.value}`;
-                const newItem = { id: editingItem?.id || Date.now(), date: selectedDate, time: combinedTime, type: form.type.value, title: form.title.value, note: form.note.value };
+                // V9.0: 使用 Random ID 防止 key 重複崩潰
+                const newItem = { id: Date.now() + Math.random().toString(36).substr(2, 9), date: selectedDate, time: combinedTime, type: form.type.value, title: form.title.value, note: form.note.value };
                 setItineraryData(prev => editingItem?.id ? prev.map(i => i.id === newItem.id ? newItem : i) : [...prev, newItem]);
                 setEditingItem(null);
             };
@@ -267,88 +295,79 @@
 
         const AccountingView = ({ expenses, setExpenses, shoppingList = [], setShoppingList, paymentMemos, setPaymentMemos }) => {
             const [viewMode, setViewMode] = useState('expenses'); 
-            
-            // Expenses Logic
             const [showModal, setShowModal] = useState(false);
             const [editingExp, setEditingExp] = useState(null);
             const [form, setForm] = useState({ amount:'', currency:'JPY', category:'food', item:'', payment:'現金', payer:'小包', note:'' });
-            const totalJPY = expenses.filter(e => e.currency === 'JPY').reduce((sum, e) => sum + Number(e.amount), 0);
-            const totalTWD = expenses.filter(e => e.currency === 'TWD').reduce((sum, e) => sum + Number(e.amount), 0);
+            
+            const safeExpenses = Array.isArray(expenses) ? expenses : [];
+            const totalJPY = safeExpenses.filter(e => e.currency === 'JPY').reduce((sum, e) => sum + Number(e.amount), 0);
+            const totalTWD = safeExpenses.filter(e => e.currency === 'TWD').reduce((sum, e) => sum + Number(e.amount), 0);
 
-            const openModal = (exp = null) => {
-                if(exp) { setEditingExp(exp); setForm(exp); } 
-                else { setEditingExp(null); setForm({ amount:'', currency:'JPY', category:'food', item:'', payment:'現金', payer:'小包', note:'' }); }
-                setShowModal(true);
-            };
+            const openModal = (exp = null) => { if(exp) { setEditingExp(exp); setForm(exp); } else { setEditingExp(null); setForm({ amount:'', currency:'JPY', category:'food', item:'', payment:'現金', payer:'小包', note:'' }); } setShowModal(true); };
             const submit = () => { 
                 if(!form.amount || !form.item) return alert("請輸入金額與品項");
-                const newExp = { ...form, id: editingExp ? editingExp.id : Date.now(), timestamp: editingExp ? editingExp.timestamp : new Date().toISOString() };
+                const newExp = { ...form, id: editingExp ? editingExp.id : Date.now() + Math.random(), timestamp: editingExp ? editingExp.timestamp : new Date().toISOString() };
                 setExpenses(prev => editingExp ? prev.map(e => e.id === newExp.id ? newExp : e) : [newExp, ...prev]); 
                 setShowModal(false); 
             };
-            const deleteExpense = () => {
-                if(confirm("確定要刪除這筆支出嗎？")) { setExpenses(prev => prev.filter(e => e.id !== editingExp.id)); setShowModal(false); }
-            };
+            const deleteExpense = () => { if(confirm("確定要刪除這筆支出嗎？")) { setExpenses(prev => prev.filter(e => e.id !== editingExp.id)); setShowModal(false); } };
             const exportExpensesCSV = () => {
                 const csv = "\uFEFF時間,分類,品項,金額,幣別,付款方式,付款人,備註\n" + 
-                expenses.map(e => `${formatDateTime24h(e.timestamp)},${CATEGORIES.find(c=>c.id===e.category)?.name},${e.item},${e.amount},${e.currency},${e.payment},${e.payer},${e.note}`).join("\n");
+                safeExpenses.map(e => `${formatDateTime24h(e.timestamp)},${CATEGORIES.find(c=>c.id===e.category)?.name || '未分類'},${e.item},${e.amount},${e.currency},${e.payment},${e.payer},${e.note}`).join("\n");
                 const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })); link.download = `JapanTrip_Expenses_${new Date().toISOString().slice(0,10)}.csv`; link.click();
             };
             const formatMoney = (amount) => Number(amount).toLocaleString();
 
-            // Wishlist Logic
             const [showWishModal, setShowWishModal] = useState(false);
             const [wishForm, setWishForm] = useState({ name: '', image: null });
+            
             const addWishItem = () => {
                 if(!wishForm.name) return;
-                setShoppingList(prev => [...prev, { id: Date.now(), name: wishForm.name, image: wishForm.image, bought: false }]);
+                setShoppingList(prev => [...prev, { id: Date.now() + Math.random(), name: wishForm.name, image: wishForm.image, bought: false }]);
                 setShowWishModal(false); setWishForm({ name: '', image: null });
             };
-            const toggleBought = (id) => { setShoppingList(prev => prev.map(item => item.id === id ? { ...item, bought: !item.bought } : item)); };
+
+            // V9.0 重寫切換邏輯：深層複製、移除特效干擾
+            const toggleBought = (id) => { 
+                setShoppingList(prev => prev.map(item => {
+                    if (item.id === id) return { ...item, bought: !item.bought };
+                    return item;
+                })); 
+            };
+
             const deleteWishItem = (id) => { if(confirm("移除此預購項目？")) setShoppingList(prev => prev.filter(item => item.id !== id)); };
+            
             const handleImageUpload = async (e) => {
                 const file = e.target.files[0];
                 if (file) {
                     try { const compressed = await resizeImage(file); setWishForm(prev => ({ ...prev, image: compressed })); } 
-                    catch (error) { alert("圖片處理失敗"); }
+                    catch (error) { alert("圖片處理失敗，請重試"); }
                 }
             };
+            
             const exportShoppingListCSV = () => {
                 const csv = "\uFEFF狀態,物品名稱\n" +
-                shoppingList.map(item => `${item.bought ? '已購買' : '未購買'},${item.name}`).join("\n");
+                (shoppingList || []).map(item => `${item.bought ? '已購買' : '未購買'},${item.name}`).join("\n");
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
                 link.download = `JapanTrip_ShoppingList_${new Date().toISOString().slice(0,10)}.csv`;
                 link.click();
             };
 
-            // Memo Logic with Image
             const [showMemoModal, setShowMemoModal] = useState(false);
             const [memoForm, setMemoForm] = useState({ id: null, title: '', content: '', image: null });
-            const openMemoModal = (memo = null) => {
-                if (memo) setMemoForm(memo);
-                else setMemoForm({ id: null, title: '', content: '', image: null });
-                setShowMemoModal(true);
-            };
+            const openMemoModal = (memo = null) => { if (memo) setMemoForm(memo); else setMemoForm({ id: null, title: '', content: '', image: null }); setShowMemoModal(true); };
             const submitMemo = () => {
                 if (!memoForm.title) return alert("請輸入標題");
-                const newMemo = { ...memoForm, id: memoForm.id || Date.now() };
+                const newMemo = { ...memoForm, id: memoForm.id || Date.now() + Math.random() };
                 setPaymentMemos(prev => memoForm.id ? prev.map(m => m.id === newMemo.id ? newMemo : m) : [newMemo, ...prev]);
                 setShowMemoModal(false);
             };
-            const deleteMemo = () => {
-                if (confirm("確定刪除此筆記？")) {
-                    setPaymentMemos(prev => prev.filter(m => m.id !== memoForm.id));
-                    setShowMemoModal(false);
-                }
-            };
+            const deleteMemo = () => { if (confirm("確定刪除此筆記？")) { setPaymentMemos(prev => prev.filter(m => m.id !== memoForm.id)); setShowMemoModal(false); } };
             const moveMemo = (index, direction) => {
                 const newMemos = [...paymentMemos];
-                if (direction === -1 && index > 0) {
-                    [newMemos[index], newMemos[index - 1]] = [newMemos[index - 1], newMemos[index]];
-                } else if (direction === 1 && index < newMemos.length - 1) {
-                    [newMemos[index], newMemos[index + 1]] = [newMemos[index + 1], newMemos[index]];
-                }
+                if (direction === -1 && index > 0) { [newMemos[index], newMemos[index - 1]] = [newMemos[index - 1], newMemos[index]]; } 
+                else if (direction === 1 && index < newMemos.length - 1) { [newMemos[index], newMemos[index + 1]] = [newMemos[index + 1], newMemos[index]]; }
                 setPaymentMemos(newMemos);
             };
             const handleMemoImageUpload = async (e) => {
@@ -368,11 +387,7 @@
                                 {(viewMode === 'expenses' || viewMode === 'wishlist') && (
                                     <button onClick={viewMode === 'expenses' ? exportExpensesCSV : exportShoppingListCSV} className="w-8 h-8 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 shadow-sm"><Icon name="file-down" size={16}/></button>
                                 )}
-                                <button onClick={() => {
-                                    if (viewMode === 'expenses') openModal();
-                                    else if (viewMode === 'wishlist') setShowWishModal(true);
-                                    else openMemoModal();
-                                }} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-400 text-white shadow-md"><Icon name="plus" size={18}/></button>
+                                <button onClick={() => { if (viewMode === 'expenses') openModal(); else if (viewMode === 'wishlist') setShowWishModal(true); else openMemoModal(); }} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-400 text-white shadow-md"><Icon name="plus" size={18}/></button>
                             </div>
                         </div>
                         <div className="flex bg-gray-200 p-1 rounded-xl">
@@ -389,9 +404,9 @@
                                 <div className="bg-white p-4 rounded-xl shadow-sm border-b-4 border-red-400"><div className="text-xs text-gray-500 mb-1">總支出 (台幣)</div><div className="text-2xl font-bold text-gray-800 tracking-tight">{formatMoney(totalTWD)}</div></div>
                             </div>
                             <div className="px-4 space-y-3 overflow-y-auto flex-1">
-                                {expenses.length===0 && <div className="text-center text-gray-400 mt-10 text-sm">點擊右上角 + 新增第一筆支出</div>}
-                                {expenses.map(e => { 
-                                    const cat = CATEGORIES.find(c=>c.id===e.category); 
+                                {safeExpenses.length===0 && <div className="text-center text-gray-400 mt-10 text-sm">點擊右上角 + 新增第一筆支出</div>}
+                                {safeExpenses.map(e => { 
+                                    const cat = CATEGORIES.find(c=>c.id===e.category) || CATEGORIES[0];
                                     const dateObj = new Date(e.timestamp);
                                     const dateStr = `${(dateObj.getMonth()+1)}/${dateObj.getDate()}`;
                                     return (
@@ -420,16 +435,27 @@
                         <div className="px-4 grid grid-cols-2 gap-3 overflow-y-auto flex-1 content-start pb-4">
                             {(shoppingList || []).length === 0 && <div className="col-span-2 text-center text-gray-400 mt-10 text-sm">尚無購物清單，點擊右上角 + 新增</div>}
                             {(shoppingList || []).map(item => (
-                                <div key={item.id} className={`bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col relative transition-all ${item.bought ? 'opacity-50' : ''}`} onClick={() => toggleBought(item.id)}>
+                                <div key={item.id} className={`bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col relative transition-all ${item.bought ? 'opacity-60' : ''}`}>
                                     <div className="aspect-square bg-gray-100 flex items-center justify-center overflow-hidden relative group">
-                                        {item.image ? <img src={item.image} alt={item.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" /> : <Icon name="image" size={32} className="text-gray-300" />}
-                                        <button onClick={(e) => { e.stopPropagation(); toggleBought(item.id); }} className={`absolute bottom-2 right-2 text-[10px] px-2 py-1 rounded-full font-bold shadow-md backdrop-blur-md transition-all active:scale-95 flex items-center gap-1 ${item.bought ? 'bg-green-500 text-white' : 'bg-white/80 text-gray-600 hover:bg-white'}`}>
-                                            {item.bought && <Icon name="check" size={10} strokeWidth={3}/>} {item.bought ? '已買' : '未買'}
+                                        {item.image ? <img src={item.image} alt={item.name} className="w-full h-full object-cover" /> : <Icon name="image" size={32} className="text-gray-300" />}
+                                        {/* V9.0 修正：點擊按鈕不再觸發圖片點擊事件，避免衝突 */}
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); toggleBought(item.id); }} 
+                                            className={`absolute bottom-2 right-2 text-[10px] px-3 py-1.5 rounded-full font-bold shadow-md backdrop-blur-md transition-all active:scale-95 border flex items-center gap-1 ${
+                                                item.bought 
+                                                ? 'bg-green-50 text-green-600 border-green-200' 
+                                                : 'bg-white text-gray-500 border-gray-200'
+                                            }`}
+                                        >
+                                            {item.bought && <Icon name="check" size={10} strokeWidth={3}/>}
+                                            {item.bought ? '已購買' : '未購買'}
                                         </button>
                                     </div>
                                     <div className="px-3 py-2.5 flex items-center justify-between bg-white">
                                         <div className="font-bold text-gray-800 text-sm truncate flex-1 pr-2">{item.name}</div>
-                                        <button onClick={(e) => { e.stopPropagation(); deleteWishItem(item.id); }} className="text-gray-300 hover:text-red-400 p-1 -mr-1 rounded-full hover:bg-red-50 transition-colors shrink-0"><Icon name="trash-2" size={16}/></button>
+                                        <button onClick={() => deleteWishItem(item.id)} className="text-gray-300 hover:text-red-400 p-1 -mr-1 rounded-full hover:bg-red-50 transition-colors shrink-0">
+                                            <Icon name="trash-2" size={16}/>
+                                        </button>
                                     </div>
                                 </div>
                             ))}
@@ -536,39 +562,33 @@
         };
 
         const AiGuideView = () => {
-            const [mode, setMode] = useState('search'); // V7.0 預設功能：搜尋
+            const [mode, setMode] = useState('search'); 
             const [input, setInput] = useState('');
             const [transInput, setTransInput] = useState('');
 
-            // Direct Links (No API Key)
-            const handleGoogleSearch = () => {
-                if(!input.trim()) return;
-                window.open(`https://www.google.com/search?q=${encodeURIComponent(input)}`, '_blank');
-            };
-
-            const handleGoogleMaps = () => {
-                if(!input.trim()) return;
-                window.open(`https://www.google.com/maps/search/${encodeURIComponent(input)}`, '_blank');
-            };
-
-            const handleGoogleImages = () => {
-                if(!input.trim()) return;
-                window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(input)}`, '_blank');
-            };
-
-            const handleTranslate = () => {
-                if(!transInput.trim()) return;
-                window.open(`https://translate.google.com/?sl=zh-TW&tl=ja&text=${encodeURIComponent(transInput)}&op=translate`, '_blank');
-            };
+            const handleGoogleSearch = () => { if(!input.trim()) return; window.open(`https://www.google.com/search?q=${encodeURIComponent(input)}`, '_blank'); };
+            const handleGoogleMaps = () => { if(!input.trim()) return; window.open(`https://www.google.com/maps/search/${encodeURIComponent(input)}`, '_blank'); };
+            const handleGoogleImages = () => { if(!input.trim()) return; window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(input)}`, '_blank'); };
+            const handleTranslate = () => { if(!transInput.trim()) return; window.open(`https://translate.google.com/?sl=zh-TW&tl=ja&text=${encodeURIComponent(transInput)}&op=translate`, '_blank'); };
 
             return (
                 <div className="h-full flex flex-col bg-gray-50 pb-20">
                     <div className="p-4 bg-white shadow-sm flex gap-4 sticky top-0 z-10 items-center">
-                        <button onClick={() => setMode('search')} className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all ${mode === 'search' ? 'bg-red-400 text-white shadow-md' : 'bg-gray-100 text-gray-500'}`}>快速搜尋</button>
+                        <button onClick={() => setMode('search')} className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all ${mode === 'search' ? 'bg-red-400 text-white shadow-md' : 'bg-gray-100 text-gray-500'}`}>一般搜尋</button>
                         <button onClick={() => setMode('translate')} className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all ${mode === 'translate' ? 'bg-red-400 text-white shadow-md' : 'bg-gray-100 text-gray-500'}`}>即時翻譯</button>
                     </div>
 
-                    {mode === 'search' ? (
+                    {mode === 'translate' ? (
+                        <div className="p-4 space-y-6 flex-1 overflow-y-auto">
+                            <div className="bg-white p-4 rounded-2xl shadow-sm">
+                                <label className="text-xs text-gray-500 mb-2 block font-bold">中文輸入 (線上翻譯)</label>
+                                <textarea className="w-full bg-gray-50 p-3 rounded-xl h-24 outline-none resize-none border focus:border-red-400 transition-colors text-lg" placeholder="輸入想翻譯的句子..." value={transInput} onChange={e=>setTransInput(e.target.value)}></textarea>
+                                <button onClick={handleTranslate} className="w-full mt-3 py-3 bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-200 active:scale-95 transition-all flex items-center justify-center gap-2">
+                                    <Icon name="languages" /> Google 翻譯 (日文)
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
                         <div className="p-4 space-y-6 flex-1 overflow-y-auto">
                              <div className="bg-white p-6 rounded-3xl shadow-sm text-center">
                                 <label className="text-sm text-gray-500 mb-3 block font-bold">想找什麼地點或美食？</label>
@@ -589,17 +609,10 @@
                                     </div>
                                 </div>
                              </div>
-                             <div className="text-center text-xs text-gray-400 mt-4">提示：輸入關鍵字後點擊按鈕，將開啟對應的 Google 服務。</div>
-                        </div>
-                    ) : (
-                        <div className="p-4 space-y-6 flex-1 overflow-y-auto">
-                            <div className="bg-white p-6 rounded-3xl shadow-sm text-center">
-                                <label className="text-sm text-gray-500 mb-3 block font-bold">輸入中文翻譯成日文</label>
-                                <textarea className="w-full bg-gray-50 p-4 rounded-2xl text-lg outline-none border-2 border-transparent focus:border-red-300 transition-all mb-4 h-32 resize-none" placeholder="輸入想翻譯的句子..." value={transInput} onChange={e=>setTransInput(e.target.value)}></textarea>
-                                <button onClick={handleTranslate} className="w-full py-4 bg-blue-500 text-white rounded-2xl font-bold shadow-lg shadow-blue-200 active:scale-95 transition-all flex items-center justify-center gap-2">
-                                    <Icon name="languages" /> 前往 Google 翻譯
-                                </button>
-                            </div>
+                             
+                             <div className="text-center text-xs text-gray-400 mt-4">
+                                 提示：輸入關鍵字後點擊按鈕，將開啟對應的 Google 服務。
+                             </div>
                         </div>
                     )}
                 </div>
@@ -632,18 +645,20 @@
             const tabs = [{id:'home',i:'home',l:'首頁'},{id:'iti',i:'calendar-days',l:'行程'},{id:'conv',i:'calculator',l:'匯率'},{id:'acc',i:'wallet',l:'記帳'},{id:'guide',i:'bot',l:'翻譯'}];
             
             return (
-                <div className="max-w-md mx-auto h-screen bg-gray-50 flex flex-col relative overflow-hidden shadow-2xl">
-                    <div className="flex-1 overflow-y-auto no-scrollbar relative">
-                        {tab==='home'?<HomeView headerImage={headerImage} setHeaderImage={setHeaderImage} />:
-                         tab==='iti'?<ItineraryView itineraryData={itinerary} setItineraryData={setItinerary} />:
-                         tab==='conv'?<ConverterView />:
-                         tab==='acc'?<AccountingView expenses={expenses} setExpenses={setExpenses} shoppingList={shoppingList} setShoppingList={setShoppingList} paymentMemos={paymentMemos} setPaymentMemos={setPaymentMemos} />:
-                         <AiGuideView />}
+                <ErrorBoundary>
+                    <div className="max-w-md mx-auto h-screen bg-gray-50 flex flex-col relative overflow-hidden shadow-2xl">
+                        <div className="flex-1 overflow-y-auto no-scrollbar relative">
+                            {tab==='home'?<HomeView headerImage={headerImage} setHeaderImage={setHeaderImage} />:
+                             tab==='iti'?<ItineraryView itineraryData={itinerary} setItineraryData={setItinerary} />:
+                             tab==='conv'?<ConverterView />:
+                             tab==='acc'?<AccountingView expenses={expenses} setExpenses={setExpenses} shoppingList={shoppingList} setShoppingList={setShoppingList} paymentMemos={paymentMemos} setPaymentMemos={setPaymentMemos} />:
+                             <AiGuideView />}
+                        </div>
+                        <div className="bg-white border-t flex justify-around items-center pb-6 pt-3 absolute bottom-0 w-full z-40">
+                            {tabs.map(t => <button key={t.id} onClick={()=>setTab(t.id)} className={`flex flex-col items-center gap-1 w-16 transition-colors ${tab===t.id?'text-red-400':'text-gray-400'}`}><Icon name={t.i} size={24} className={tab===t.id?'stroke-2':'stroke-1'} /><span className="text-[10px] font-medium">{t.l}</span></button>)}
+                        </div>
                     </div>
-                    <div className="bg-white border-t flex justify-around items-center pb-6 pt-3 absolute bottom-0 w-full z-40">
-                        {tabs.map(t => <button key={t.id} onClick={()=>setTab(t.id)} className={`flex flex-col items-center gap-1 w-16 transition-colors ${tab===t.id?'text-red-400':'text-gray-400'}`}><Icon name={t.i} size={24} className={tab===t.id?'stroke-2':'stroke-1'} /><span className="text-[10px] font-medium">{t.l}</span></button>)}
-                    </div>
-                </div>
+                </ErrorBoundary>
             );
         };
         ReactDOM.createRoot(document.getElementById('root')).render(<App />);
