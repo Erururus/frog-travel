@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="frog-travel">
-    <title>frog-travel (V9.0 重構核心版)</title>
+    <title>frog-travel (V9.2 經典UI版)</title>
     
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icon.png" />
@@ -43,7 +43,7 @@
             static getDerivedStateFromError(error) { return { hasError: true }; }
             componentDidCatch(error, errorInfo) { console.error("Crash:", error); }
             resetData = () => {
-                if(confirm("確定要重置資料以修復 App 嗎？")) {
+                if(confirm("這將清除所有資料（修復白屏問題），確定嗎？")) {
                     localStorage.clear();
                     window.location.reload();
                 }
@@ -52,10 +52,12 @@
                 if (this.state.hasError) {
                     return (
                         <div className="h-screen flex flex-col items-center justify-center p-8 text-center bg-gray-50">
-                            <div className="bg-white p-6 rounded-2xl shadow-lg">
-                                <h1 className="text-xl font-bold text-gray-800 mb-2">程式發生錯誤</h1>
-                                <button onClick={this.resetData} className="bg-red-500 text-white px-6 py-3 rounded-xl font-bold w-full mb-3">重置資料</button>
-                                <button onClick={() => window.location.reload()} className="text-gray-400 text-sm underline">重新整理</button>
+                            <div className="bg-white p-6 rounded-2xl shadow-lg border-2 border-red-100">
+                                <div className="text-4xl mb-4">😵</div>
+                                <h1 className="text-xl font-bold text-gray-800 mb-2">發生錯誤</h1>
+                                <p className="text-gray-500 mb-6 text-sm">可能是圖片檔案太大。請按下方按鈕重置。</p>
+                                <button onClick={this.resetData} className="bg-red-500 text-white px-6 py-3 rounded-xl font-bold w-full mb-3 shadow-lg">重置資料並修復</button>
+                                <button onClick={() => window.location.reload()} className="text-gray-400 text-xs underline">嘗試重新整理</button>
                             </div>
                         </div>
                     );
@@ -76,7 +78,6 @@
             return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
         };
 
-        // V9.0: 圖片限制 200px, 品質 0.3 (極度輕量化)
         const resizeImage = (file, maxWidth = 200) => {
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -145,7 +146,6 @@
 
         const PAYMENT_METHODS = ['PayPay', '富邦J', '中信uniopen', '玉山unicard', '台新太陽', '現金', 'SUICA'];
 
-        // --- Components ---
         const HomeView = ({ headerImage, setHeaderImage }) => {
             const handleHeaderUpload = async (e) => {
                 const file = e.target.files[0];
@@ -158,12 +158,12 @@
                 <div className="space-y-4 pb-24">
                     <div className="w-full h-48 bg-gray-200 rounded-b-3xl overflow-hidden relative shadow-md group">
                         <img src={headerImage || "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?ixlib=rb-4.0.3&w=800&q=80"} className="w-full h-full object-cover" />
-                        <label className="absolute bottom-3 right-3 bg-black/30 p-2 rounded-full cursor-pointer"><Icon name="camera" size={20} className="text-white" /><input type="file" accept="image/*" onChange={handleHeaderUpload} className="hidden" /></label>
+                        <label className="absolute bottom-3 right-3 bg-black/30 backdrop-blur-md p-2 rounded-full cursor-pointer hover:bg-black/50 transition-colors"><Icon name="camera" size={20} className="text-white" /><input type="file" accept="image/*" onChange={handleHeaderUpload} className="hidden" /></label>
                     </div>
                     <div className="px-4 space-y-4">
                         <div className="grid grid-cols-2 gap-4">
-                            <a href={INITIAL_TRIP_DATA.links.visitJapan} target="_blank" className="bg-white p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center active:scale-95 transition-transform"><Icon name="qr-code" className="text-blue-500" size={32} /> <span className="text-blue-500 font-bold text-sm">Visit Japan Web</span></a>
-                            <a href={INITIAL_TRIP_DATA.links.myMap} target="_blank" className="bg-white p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center active:scale-95 transition-transform"><Icon name="map" className="text-rose-400" size={32} /> <span className="text-rose-400 font-bold text-sm">我的地圖</span></a>
+                            <a href={INITIAL_TRIP_DATA.links.visitJapan} target="_blank" className="bg-white p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center space-y-2 active:scale-95 transition-transform"><Icon name="qr-code" className="text-blue-500" size={32} /> <span className="text-blue-500 font-bold text-sm">Visit Japan Web</span></a>
+                            <a href={INITIAL_TRIP_DATA.links.myMap} target="_blank" className="bg-white p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center space-y-2 active:scale-95 transition-transform"><Icon name="map" className="text-rose-400" size={32} /> <span className="text-rose-400 font-bold text-sm">我的地圖</span></a>
                         </div>
                         <div className="bg-white rounded-2xl p-3 shadow-sm">
                             <h3 className="font-bold text-gray-700 mb-2 flex items-center gap-2"><Icon name="plane" size={18} /> 航班資訊</h3>
@@ -212,6 +212,7 @@
             }, [selectedDate]);
 
             const getTypeStyle = (type) => {
+                // V9.2: 回復 V3.1 的淺色背景邏輯，以便後續 .replace('100', '500') 能夠運作
                 switch(type) {
                     case 'hotel': return { bg:'bg-purple-100', c:'text-purple-600', i:'bed' };
                     case 'move': return { bg:'bg-green-100', c:'text-green-500', i:'footprints' };
@@ -223,8 +224,7 @@
             const handleSave = (e) => {
                 e.preventDefault(); const form = e.target;
                 const combinedTime = `${form.hour.value}:${form.minute.value}`;
-                // V9.0: 使用 Random ID 防止 key 重複崩潰
-                const newItem = { id: Date.now() + Math.random().toString(36).substr(2, 9), date: selectedDate, time: combinedTime, type: form.type.value, title: form.title.value, note: form.note.value };
+                const newItem = { id: editingItem?.id || Date.now() + Math.random().toString(36).substr(2, 9), date: selectedDate, time: combinedTime, type: form.type.value, title: form.title.value, note: form.note.value };
                 setItineraryData(prev => editingItem?.id ? prev.map(i => i.id === newItem.id ? newItem : i) : [...prev, newItem]);
                 setEditingItem(null);
             };
@@ -240,12 +240,32 @@
                     <div className="p-4 flex-1 overflow-y-auto">
                         <div className="bg-white border border-blue-100 rounded-2xl p-3 shadow-sm mb-4 flex items-center gap-4"><div className="flex items-center gap-2 pl-2"><Icon name={weather.code > 3 ? "cloud-rain" : "cloud-sun"} size={32} className="text-blue-500" /><span className="text-3xl font-bold text-gray-800 tracking-tight">{weather.temp}°</span></div><div className="w-px h-8 bg-gray-100"></div><div className="flex-1 flex flex-col justify-center gap-0.5 text-xs text-gray-500"><div className="flex items-center gap-1 font-bold text-gray-700"><Icon name="map-pin" size={10} className="text-red-400"/> {weather.location}</div><div>H:{weather.max}° L:{weather.min}°</div><div className="flex items-center gap-2"><span>體感 {weather.feels}°</span><span className="text-gray-200">|</span><span className="flex items-center gap-1"><Icon name="droplets" size={10} className="text-blue-300"/> {weather.humidity}%</span></div></div></div>
                         <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-gray-700">行程總覽</h3><div className="flex gap-2"><button onClick={exportItineraryCSV} className="text-xs px-3 py-1 rounded-full border bg-white text-gray-500 flex items-center gap-1 active:scale-95"><Icon name="file-down" size={14} /> 匯出</button><button onClick={() => setIsEditMode(!isEditMode)} className={`text-xs px-3 py-1 rounded-full border ${isEditMode ? 'bg-red-400 text-white' : 'bg-white text-gray-500'}`}>{isEditMode ? '完成' : '編輯'}</button></div></div>
+                        
+                        {/* V9.2: 恢復 V3.1 的時間軸設計 (垂直排列、大圓圈、連接線) */}
                         <div className="space-y-4 relative pl-2">
                             {daysEvents.map((item, idx) => {
                                 const style = getTypeStyle(item.type);
                                 const mapSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.title)}`;
                                 return (
-                                    <div key={item.id} className="flex gap-3 relative"><div className="flex flex-col items-center w-12 shrink-0 relative">{idx !== daysEvents.length - 1 && <div className="absolute top-10 bottom-[-24px] w-0.5 bg-gray-200 -z-0"></div>}<span className="text-[11px] font-bold text-gray-500 mb-1 font-mono tracking-tight">{item.time}</span><div className={`w-10 h-10 rounded-full flex items-center justify-center text-white shadow-md z-10 ${style.bg.replace('bg-', 'bg-').replace('100', '500')}`}><Icon name={style.i} size={20} /></div></div><div className="flex-1 bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-transform"><div className="flex-1 min-w-0 pr-2"><h4 className={`font-bold text-base truncate ${style.c}`}>{item.title}</h4>{item.note && <p className="text-xs text-gray-400 mt-0.5 truncate">{item.note}</p>}</div><div className="flex items-center gap-2 shrink-0">{isEditMode ? (<><button onClick={()=>setEditingItem(item)} className="p-2 bg-blue-50 rounded-full text-blue-400"><Icon name="edit-2" size={14}/></button><button onClick={()=>{if(confirm('刪除?'))setItineraryData(p=>p.filter(x=>x.id!==item.id))}} className="p-2 bg-red-50 rounded-full text-red-400"><Icon name="trash-2" size={14}/></button></>) : <a href={mapSearchUrl} target="_blank" className="text-gray-300 hover:text-blue-500 transition-colors"><Icon name="send" size={18} /></a>}</div></div></div>
+                                    <div key={item.id} className="flex gap-3 relative">
+                                        <div className="flex flex-col items-center w-12 shrink-0 relative">
+                                            {idx !== daysEvents.length - 1 && <div className="absolute top-10 bottom-[-24px] w-0.5 bg-gray-200 -z-0"></div>}
+                                            <span className="text-[11px] font-bold text-gray-500 mb-1 font-mono tracking-tight">{item.time}</span>
+                                            {/* 使用 replace 技巧加深背景色 */}
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white shadow-md z-10 ${style.bg.replace('bg-', 'bg-').replace('100', '500')}`}>
+                                                <Icon name={style.i} size={20} />
+                                            </div>
+                                        </div>
+                                        <div className="flex-1 bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center active:scale-[0.98] transition-transform">
+                                            <div className="flex-1 min-w-0 pr-2">
+                                                <h4 className={`font-bold text-base truncate ${style.c}`}>{item.title}</h4>
+                                                {item.note && <p className="text-xs text-gray-400 mt-0.5 truncate">{item.note}</p>}
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                {isEditMode ? (<><button onClick={()=>setEditingItem(item)} className="p-2 bg-blue-50 rounded-full text-blue-400"><Icon name="edit-2" size={14}/></button><button onClick={()=>{if(confirm('刪除?'))setItineraryData(p=>p.filter(x=>x.id!==item.id))}} className="p-2 bg-red-50 rounded-full text-red-400"><Icon name="trash-2" size={14}/></button></>) : <a href={mapSearchUrl} target="_blank" className="text-gray-300 hover:text-blue-500 transition-colors"><Icon name="send" size={18} /></a>}
+                                            </div>
+                                        </div>
+                                    </div>
                                 );
                             })}
                             {isEditMode && <button onClick={() => setEditingItem({id:null, time:'12:00', type:'spot', title:'', note:''})} className="w-full py-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 flex justify-center items-center gap-2 hover:bg-gray-50 mt-4"><Icon name="plus" /> 新增行程</button>}
@@ -303,14 +323,20 @@
             const totalJPY = safeExpenses.filter(e => e.currency === 'JPY').reduce((sum, e) => sum + Number(e.amount), 0);
             const totalTWD = safeExpenses.filter(e => e.currency === 'TWD').reduce((sum, e) => sum + Number(e.amount), 0);
 
-            const openModal = (exp = null) => { if(exp) { setEditingExp(exp); setForm(exp); } else { setEditingExp(null); setForm({ amount:'', currency:'JPY', category:'food', item:'', payment:'現金', payer:'小包', note:'' }); } setShowModal(true); };
+            const openModal = (exp = null) => {
+                if(exp) { setEditingExp(exp); setForm(exp); } 
+                else { setEditingExp(null); setForm({ amount:'', currency:'JPY', category:'food', item:'', payment:'現金', payer:'小包', note:'' }); }
+                setShowModal(true);
+            };
             const submit = () => { 
                 if(!form.amount || !form.item) return alert("請輸入金額與品項");
-                const newExp = { ...form, id: editingExp ? editingExp.id : Date.now() + Math.random(), timestamp: editingExp ? editingExp.timestamp : new Date().toISOString() };
+                const newExp = { ...form, id: editingExp ? editingExp.id : Date.now() + Math.random().toString(36).substr(2, 9), timestamp: editingExp ? editingExp.timestamp : new Date().toISOString() };
                 setExpenses(prev => editingExp ? prev.map(e => e.id === newExp.id ? newExp : e) : [newExp, ...prev]); 
                 setShowModal(false); 
             };
-            const deleteExpense = () => { if(confirm("確定要刪除這筆支出嗎？")) { setExpenses(prev => prev.filter(e => e.id !== editingExp.id)); setShowModal(false); } };
+            const deleteExpense = () => {
+                if(confirm("確定要刪除這筆支出嗎？")) { setExpenses(prev => prev.filter(e => e.id !== editingExp.id)); setShowModal(false); }
+            };
             const exportExpensesCSV = () => {
                 const csv = "\uFEFF時間,分類,品項,金額,幣別,付款方式,付款人,備註\n" + 
                 safeExpenses.map(e => `${formatDateTime24h(e.timestamp)},${CATEGORIES.find(c=>c.id===e.category)?.name || '未分類'},${e.item},${e.amount},${e.currency},${e.payment},${e.payer},${e.note}`).join("\n");
@@ -320,23 +346,17 @@
 
             const [showWishModal, setShowWishModal] = useState(false);
             const [wishForm, setWishForm] = useState({ name: '', image: null });
-            
             const addWishItem = () => {
                 if(!wishForm.name) return;
-                setShoppingList(prev => [...prev, { id: Date.now() + Math.random(), name: wishForm.name, image: wishForm.image, bought: false }]);
+                setShoppingList(prev => [...prev, { id: Date.now() + Math.random().toString(36).substr(2, 9), name: wishForm.name, image: wishForm.image, bought: false }]);
                 setShowWishModal(false); setWishForm({ name: '', image: null });
             };
-
-            // V9.0 重寫切換邏輯：深層複製、移除特效干擾
+            // V9.1: Toggle logic + Button Style (No visual effect on image)
             const toggleBought = (id) => { 
-                setShoppingList(prev => prev.map(item => {
-                    if (item.id === id) return { ...item, bought: !item.bought };
-                    return item;
-                })); 
+                setShoppingList(prev => prev.map(item => item.id === id ? { ...item, bought: !item.bought } : item)); 
             };
-
             const deleteWishItem = (id) => { if(confirm("移除此預購項目？")) setShoppingList(prev => prev.filter(item => item.id !== id)); };
-            
+            const handleBuy = (id) => { if(confirm("確認已買到？(將從清單移除)")) setShoppingList(prev => prev.filter(item => item.id !== id)); };
             const handleImageUpload = async (e) => {
                 const file = e.target.files[0];
                 if (file) {
@@ -344,7 +364,6 @@
                     catch (error) { alert("圖片處理失敗，請重試"); }
                 }
             };
-            
             const exportShoppingListCSV = () => {
                 const csv = "\uFEFF狀態,物品名稱\n" +
                 (shoppingList || []).map(item => `${item.bought ? '已購買' : '未購買'},${item.name}`).join("\n");
@@ -356,18 +375,30 @@
 
             const [showMemoModal, setShowMemoModal] = useState(false);
             const [memoForm, setMemoForm] = useState({ id: null, title: '', content: '', image: null });
-            const openMemoModal = (memo = null) => { if (memo) setMemoForm(memo); else setMemoForm({ id: null, title: '', content: '', image: null }); setShowMemoModal(true); };
+            const openMemoModal = (memo = null) => {
+                if (memo) setMemoForm(memo);
+                else setMemoForm({ id: null, title: '', content: '', image: null });
+                setShowMemoModal(true);
+            };
             const submitMemo = () => {
                 if (!memoForm.title) return alert("請輸入標題");
-                const newMemo = { ...memoForm, id: memoForm.id || Date.now() + Math.random() };
+                const newMemo = { ...memoForm, id: memoForm.id || Date.now() + Math.random().toString(36).substr(2, 9) };
                 setPaymentMemos(prev => memoForm.id ? prev.map(m => m.id === newMemo.id ? newMemo : m) : [newMemo, ...prev]);
                 setShowMemoModal(false);
             };
-            const deleteMemo = () => { if (confirm("確定刪除此筆記？")) { setPaymentMemos(prev => prev.filter(m => m.id !== memoForm.id)); setShowMemoModal(false); } };
+            const deleteMemo = () => {
+                if (confirm("確定刪除此筆記？")) {
+                    setPaymentMemos(prev => prev.filter(m => m.id !== memoForm.id));
+                    setShowMemoModal(false);
+                }
+            };
             const moveMemo = (index, direction) => {
                 const newMemos = [...paymentMemos];
-                if (direction === -1 && index > 0) { [newMemos[index], newMemos[index - 1]] = [newMemos[index - 1], newMemos[index]]; } 
-                else if (direction === 1 && index < newMemos.length - 1) { [newMemos[index], newMemos[index + 1]] = [newMemos[index + 1], newMemos[index]]; }
+                if (direction === -1 && index > 0) {
+                    [newMemos[index], newMemos[index - 1]] = [newMemos[index - 1], newMemos[index]];
+                } else if (direction === 1 && index < newMemos.length - 1) {
+                    [newMemos[index], newMemos[index + 1]] = [newMemos[index + 1], newMemos[index]];
+                }
                 setPaymentMemos(newMemos);
             };
             const handleMemoImageUpload = async (e) => {
@@ -387,7 +418,11 @@
                                 {(viewMode === 'expenses' || viewMode === 'wishlist') && (
                                     <button onClick={viewMode === 'expenses' ? exportExpensesCSV : exportShoppingListCSV} className="w-8 h-8 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 shadow-sm"><Icon name="file-down" size={16}/></button>
                                 )}
-                                <button onClick={() => { if (viewMode === 'expenses') openModal(); else if (viewMode === 'wishlist') setShowWishModal(true); else openMemoModal(); }} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-400 text-white shadow-md"><Icon name="plus" size={18}/></button>
+                                <button onClick={() => {
+                                    if (viewMode === 'expenses') openModal();
+                                    else if (viewMode === 'wishlist') setShowWishModal(true);
+                                    else openMemoModal();
+                                }} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-400 text-white shadow-md"><Icon name="plus" size={18}/></button>
                             </div>
                         </div>
                         <div className="flex bg-gray-200 p-1 rounded-xl">
@@ -435,20 +470,20 @@
                         <div className="px-4 grid grid-cols-2 gap-3 overflow-y-auto flex-1 content-start pb-4">
                             {(shoppingList || []).length === 0 && <div className="col-span-2 text-center text-gray-400 mt-10 text-sm">尚無購物清單，點擊右上角 + 新增</div>}
                             {(shoppingList || []).map(item => (
-                                <div key={item.id} className={`bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col relative transition-all ${item.bought ? 'opacity-60' : ''}`}>
+                                <div key={item.id} className="bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col relative">
                                     <div className="aspect-square bg-gray-100 flex items-center justify-center overflow-hidden relative group">
-                                        {item.image ? <img src={item.image} alt={item.name} className="w-full h-full object-cover" /> : <Icon name="image" size={32} className="text-gray-300" />}
-                                        {/* V9.0 修正：點擊按鈕不再觸發圖片點擊事件，避免衝突 */}
+                                        {item.image ? (
+                                            <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <Icon name="image" size={32} className="text-gray-300" />
+                                        )}
+                                        
+                                        {/* V9.1 優化：狀態切換按鈕 (確認購買) */}
                                         <button 
-                                            onClick={(e) => { e.stopPropagation(); toggleBought(item.id); }} 
-                                            className={`absolute bottom-2 right-2 text-[10px] px-3 py-1.5 rounded-full font-bold shadow-md backdrop-blur-md transition-all active:scale-95 border flex items-center gap-1 ${
-                                                item.bought 
-                                                ? 'bg-green-50 text-green-600 border-green-200' 
-                                                : 'bg-white text-gray-500 border-gray-200'
-                                            }`}
+                                            onClick={(e) => { e.stopPropagation(); handleBuy(item.id); }} 
+                                            className="absolute bottom-2 right-2 text-[10px] px-3 py-1.5 rounded-full font-bold shadow-md backdrop-blur-md transition-all active:scale-95 flex items-center gap-1 bg-white text-gray-500 border border-gray-200 hover:bg-green-50 hover:text-green-600 hover:border-green-200"
                                         >
-                                            {item.bought && <Icon name="check" size={10} strokeWidth={3}/>}
-                                            {item.bought ? '已購買' : '未購買'}
+                                            <Icon name="check" size={12} strokeWidth={3}/> 確認購買
                                         </button>
                                     </div>
                                     <div className="px-3 py-2.5 flex items-center justify-between bg-white">
@@ -609,10 +644,7 @@
                                     </div>
                                 </div>
                              </div>
-                             
-                             <div className="text-center text-xs text-gray-400 mt-4">
-                                 提示：輸入關鍵字後點擊按鈕，將開啟對應的 Google 服務。
-                             </div>
+                             <div className="text-center text-xs text-gray-400 mt-4">提示：輸入關鍵字後點擊按鈕，將開啟對應的 Google 服務。</div>
                         </div>
                     )}
                 </div>
